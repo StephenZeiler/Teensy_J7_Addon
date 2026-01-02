@@ -1,4 +1,3 @@
-
 /*  Teensy Bulb Ram Controller (Stepper + Home + Overrun + Arduino handshake)
 
   WHAT THIS DOES
@@ -40,6 +39,7 @@
 */
 
 #include <Arduino.h>
+#include <IntervalTimer.h>
 
 // -------------------- USER CONFIG --------------------
 // Motor pins (as you requested)
@@ -118,12 +118,60 @@ inline void setDir(bool dir) {
   digitalWrite(PIN_DIR, dir);
 }
 
+/* -------------------------------------------------------------------------
+   STEPPING CHANGE ONLY:
+   - Replaced delayMicroseconds-based stepOnce() with a hardware-timer driven
+     pulse generator (IntervalTimer) that times the HIGH pulse and LOW gap.
+   - Everything else in your code is unchanged.
+
+   Timer tick = 1us. ISR advances a tiny 3-state pulse machine:
+     IDLE -> HIGH pulse -> LOW gap -> IDLE
+---------------------------------------------------------------------------*/
+IntervalTimer stepTimer;
+
+static volatile uint8_t  stepState = 0;     // 0=IDLE, 1=HIGH, 2=LOW_GAP
+static volatile uint16_t highUsReq = 0;
+static volatile uint16_t lowUsReq  = 0;
+static volatile uint16_t ticksLeft = 0;
+
+void stepperISR() {
+  if (stepState == 0) return;
+
+  if (ticksLeft > 0) {
+    ticksLeft--;
+    return;
+  }
+
+  if (stepState == 1) {
+    // End HIGH pulse -> STEP LOW, start LOW gap
+    digitalWriteFast(PIN_PUL, LOW);
+    stepState = 2;
+    ticksLeft = (lowUsReq > 0) ? (uint16_t)(lowUsReq - 1) : 0;
+    return;
+  }
+
+  if (stepState == 2) {
+    // End LOW gap -> done
+    stepState = 0;
+    return;
+  }
+}
+
 // Single step pulse
 inline void stepOnce(uint16_t pulseHighUs, uint16_t stepDelayUs) {
-  digitalWrite(PIN_PUL, HIGH);
-  delayMicroseconds(pulseHighUs);
-  digitalWrite(PIN_PUL, LOW);
-  delayMicroseconds(stepDelayUs);
+  // Request a pulse (HIGH then LOW) timed by the ISR
+  noInterrupts();
+  highUsReq = pulseHighUs;
+  lowUsReq  = stepDelayUs;
+  stepState = 1;
+  ticksLeft = (highUsReq > 0) ? (uint16_t)(highUsReq - 1) : 0;
+  digitalWriteFast(PIN_PUL, HIGH);
+  interrupts();
+
+  // Wait only for THIS step to complete (your existing motion loops stay the same)
+  while (stepState != 0) {
+    // no delay; ISR is doing the timing
+  }
 }
 
 // Emergency stop + notify Arduino
@@ -272,6 +320,9 @@ void setup() {
   digitalWrite(PIN_PUL, LOW);
   setDir(DIR_CW);
   motorEnable(true);
+
+  // Start the 1us stepping timer (stepping change only)
+  stepTimer.begin(stepperISR, 1);
 
   // Start homing immediately
   state = State::BOOT_HOMING;
