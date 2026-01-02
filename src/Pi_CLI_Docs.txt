@@ -1,0 +1,17 @@
+Install NPM and build:
+1) cd DropperHMI_V1
+2) npm install
+3) npm run build
+
+launch in kiosk : 
+1) cd /home/szeiler16/DropperHMI_V1/dist/spa
+2) python3 -m http.server 8000 &
+3) DISPLAY=:0 XAUTHORITY=/home/szeiler16/.Xauthority chromium \
+  --kiosk \
+  --no-default-browser-check \
+  --no-first-run \
+  http://localhost:8000
+
+
+Close chromium (must do in seperate terminal):
+pkill chromium
