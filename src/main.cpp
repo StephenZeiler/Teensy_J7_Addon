@@ -247,7 +247,7 @@ void doInjectCycle() {
 void setup() {
   // Optional debugging:
   // Serial.begin(115200);
-
+  delay(1000);
   pinMode(PIN_PUL, OUTPUT);
   pinMode(PIN_DIR, OUTPUT);
   pinMode(PIN_ENA, OUTPUT);
@@ -280,11 +280,15 @@ void setup() {
 void loop() {
   switch (state) {
     case State::BOOT_HOMING: {
-      if (isOverrunActive()) faultOverrun("OVERRUN active at boot");
-      doHoming();
-      state = State::READY_IDLE;
-      break;
-    }
+  if (isOverrunActive()) faultOverrun("OVERRUN active at boot");
+
+  doHoming();
+
+  delay(3000);  // ⏱️ 3 second delay AFTER setup (operator confirmation / system settle)
+
+  state = State::READY_IDLE;
+  break;
+}
 
     case State::READY_IDLE: {
       // In production, continuously verify overrun isn't hit
