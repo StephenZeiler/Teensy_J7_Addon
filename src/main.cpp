@@ -56,8 +56,8 @@ constexpr uint8_t PIN_HOME_READY    = 11; // Teensy  -> Arduino (output)
 constexpr uint8_t PIN_OVERRUN_ALARM = 12; // Teensy  -> Arduino (output)
 
 // Direction definitions (change if your mechanics are flipped)
-constexpr bool DIR_CW  = HIGH; // clockwise
-constexpr bool DIR_CCW = LOW;  // counter-clockwise
+constexpr bool DIR_CW  = LOW;   // flipped
+constexpr bool DIR_CCW = HIGH;  // flipped
 
 // Step counts
 constexpr int STEPS_INJECT       = 480; // from home to inject
