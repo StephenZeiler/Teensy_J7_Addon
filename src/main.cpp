@@ -42,6 +42,8 @@
 
 // -------------------- USER CONFIG --------------------
 // Motor pins (as you requested)
+constexpr bool TEST_SIMULATE_PIN10_HIGH = true;  // true = behave like Arduino holds pin10 HIGH
+constexpr uint16_t CONTINUOUS_CYCLE_DELAY_MS = 150; // small pause at home between cycles
 constexpr bool TEST_MODE_FORCE_INJECT = true; //test value remove later
 constexpr uint8_t PIN_PUL = 2;
 constexpr uint8_t PIN_DIR = 3;
@@ -299,12 +301,14 @@ void loop() {
       setHomeReady(true);
 
       // Rising-edge detect on INJECT_CMD
-      // bool injectCmd = digitalRead(PIN_INJECT_CMD) == HIGH;
-      bool injectCmd = TEST_MODE_FORCE_INJECT ? true : (digitalRead(PIN_INJECT_CMD) == HIGH); // test value remove later
-      if (injectCmd && !lastInjectCmd) {
-        state = State::INJECTING;
-      }
-      lastInjectCmd = injectCmd;
+      bool injectCmd = TEST_SIMULATE_PIN10_HIGH ? true : (digitalRead(PIN_INJECT_CMD) == HIGH);
+
+// If "injectCmd" is HIGH, keep cycling injections.
+// We only start a cycle when we're truly at HOME and ready.
+if (injectCmd && isHomeActive()) {
+  delay(CONTINUOUS_CYCLE_DELAY_MS);   // makes the loop look realistic and avoids hammering
+  state = State::INJECTING;
+}
 
       break;
     }
