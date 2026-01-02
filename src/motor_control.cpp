@@ -1,4 +1,3 @@
-#include "motor_control.h"
 #include <Arduino.h>
 
 // Motor control pins
