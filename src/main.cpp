@@ -246,7 +246,7 @@ void doInjectCycle() {
 void setup() {
   // Optional debugging:
   // Serial.begin(115200);
-
+  delay(1000);
   pinMode(PIN_PUL, OUTPUT);
   pinMode(PIN_DIR, OUTPUT);
   pinMode(PIN_ENA, OUTPUT);
