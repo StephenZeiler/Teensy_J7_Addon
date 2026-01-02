@@ -92,7 +92,6 @@ enum class State {
 };
 
 State state = State::BOOT_HOMING;
-bool lastInjectCmd = false;
 
 inline bool isHomeActive() {
   bool v = digitalRead(PIN_HOME_SENSOR);
@@ -295,11 +294,12 @@ void loop() {
 
       // Rising-edge detect on INJECT_CMD
       bool injectCmd = digitalRead(PIN_INJECT_CMD) == HIGH;
-      if (injectCmd && !lastInjectCmd) {
-        state = State::INJECTING;
-      }
-      lastInjectCmd = injectCmd;
-
+      // LEVEL-TRIGGERED:
+      // If pin10 is HIGH and we are at HOME, inject again
+      if (injectCmd && isHomeActive()) {
+      delay(150);               // small pause so we don't instantly re-trigger
+      state = State::INJECTING;
+}
       break;
     }
 
