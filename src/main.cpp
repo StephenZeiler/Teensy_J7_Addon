@@ -42,6 +42,7 @@
 
 // -------------------- USER CONFIG --------------------
 // Motor pins (as you requested)
+constexpr bool TEST_MODE_FORCE_INJECT = true; //test value remove later
 constexpr uint8_t PIN_PUL = 2;
 constexpr uint8_t PIN_DIR = 3;
 constexpr uint8_t PIN_ENA = 4;
@@ -294,7 +295,8 @@ void loop() {
       setHomeReady(true);
 
       // Rising-edge detect on INJECT_CMD
-      bool injectCmd = digitalRead(PIN_INJECT_CMD) == HIGH;
+      // bool injectCmd = digitalRead(PIN_INJECT_CMD) == HIGH;
+      bool injectCmd = TEST_MODE_FORCE_INJECT ? true : (digitalRead(PIN_INJECT_CMD) == HIGH); // test value remove later
       if (injectCmd && !lastInjectCmd) {
         state = State::INJECTING;
       }
