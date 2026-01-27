@@ -73,7 +73,7 @@ constexpr uint16_t STEP_DELAY_US_SLOW  = 900; // (SLOW) used for final "creep" o
 // Logic polarity
 constexpr bool HOME_ACTIVE_LOW    = false; // HOME is "triggered" when HIGH
 constexpr bool OVERRUN_ACTIVE_LOW = false; // OVERRUN is "triggered" when HIGH
-constexpr bool ENA_ACTIVE_LOW     = true; // ENA LOW enables driver
+constexpr bool ENA_ACTIVE_LOW     = false; // ENA LOW enables driver
 
 // Safety timeouts to avoid infinite motion if a sensor fails (in steps)
 constexpr int HOMING_MAX_STEPS_CW  = 4000;
@@ -330,86 +330,89 @@ void setup() {
 }
 
 
-//
-constexpr uint16_t STEP_PULSE_US = 5;
-constexpr uint16_t STEP_DELAY_US = 1500;
-constexpr bool DIR_A = HIGH;
-constexpr bool DIR_B = LOW;
-void stepOnce() {
-  digitalWrite(PIN_PUL, HIGH);
-  delayMicroseconds(STEP_PULSE_US);
-  digitalWrite(PIN_PUL, LOW);
-  delayMicroseconds(STEP_DELAY_US);
-}
+// test code
+// constexpr uint16_t STEP_PULSE_US = 5;
+// constexpr uint16_t STEP_DELAY_US = 1500;
+// constexpr bool DIR_A = HIGH;
+// constexpr bool DIR_B = LOW;
+// void stepOnce() {
+//   digitalWrite(PIN_PUL, HIGH);
+//   delayMicroseconds(STEP_PULSE_US);
+//   digitalWrite(PIN_PUL, LOW);
+//   delayMicroseconds(STEP_DELAY_US);
+// }
 
-// ---- MOVE N STEPS ----
-void moveSteps(bool dir, int steps) {
-  digitalWrite(PIN_DIR, dir);
-  for (int i = 0; i < steps; i++) {
-    stepOnce();
-  }
-}
+// // ---- MOVE N STEPS ----
+// void moveSteps(bool dir, int steps) {
+//   digitalWrite(PIN_DIR, dir);
+//   for (int i = 0; i < steps; i++) {
+//     stepOnce();
+//   }
+// }
 //
 void loop() {
-//   switch (state) {
-//     case State::BOOT_HOMING: {
-//       if (isOverrunActive()) faultOverrun("OVERRUN active at boot");
-//       doHoming();
-//       state = State::READY_IDLE;
-//       break;
-//     }
+  switch (state) {
+    case State::BOOT_HOMING: {
+      if (isOverrunActive()) faultOverrun("OVERRUN active at boot");
+      doHoming();
+      state = State::READY_IDLE;
+      break;
+    }
 
-//     case State::READY_IDLE: {
-//       // In production, continuously verify overrun isn't hit
-//       if (isOverrunActive()) faultOverrun("OVERRUN during READY_IDLE");
+    case State::READY_IDLE: {
+      // In production, continuously verify overrun isn't hit
+      if (isOverrunActive()) faultOverrun("OVERRUN during READY_IDLE");
 
-//       // Keep HOME_READY asserted when we are truly home
-//       // (If you want it strictly from logic, you can also do: setHomeReady(isHomeActive()); )
-//       setHomeReady(true);
+      // Keep HOME_READY asserted when we are truly home
+      // (If you want it strictly from logic, you can also do: setHomeReady(isHomeActive()); )
+      setHomeReady(true);
 
-//       // Rising-edge detect on INJECT_CMD
-//       bool injectCmd = digitalRead(PIN_INJECT_CMD) == HIGH;
-//       // LEVEL-TRIGGERED:
-//       // If pin10 is HIGH and we are at HOME, inject again
-//       if (injectCmd && isHomeActive()) {
-//       delay(150);               // small pause so we don't instantly re-trigger
-//       state = State::INJECTING;
-// }
-//       break;
-//     }
+      // Rising-edge detect on INJECT_CMD
+      bool injectCmd = digitalRead(PIN_INJECT_CMD) == HIGH;
+      // LEVEL-TRIGGERED:
+      // If pin10 is HIGH and we are at HOME, inject again
+      if (injectCmd && isHomeActive()) {
+      delay(150);               // small pause so we don't instantly re-trigger
+      state = State::INJECTING;
+}
+      break;
+    }
 
-//     case State::INJECTING: {
-//       doInjectCycle();
-//       // After cycle, we should be home and HOME_READY already set HIGH by doInjectCycle()
-//       state = State::READY_IDLE;
-//       break;
-//     }
+    case State::INJECTING: {
+      doInjectCycle();
+      // After cycle, we should be home and HOME_READY already set HIGH by doInjectCycle()
+      state = State::READY_IDLE;
+      break;
+    }
 
-//     case State::RETURNING:
-//       // Not used (kept for future expansion)
-//       state = State::READY_IDLE;
-//       break;
+    case State::RETURNING:
+      // Not used (kept for future expansion)
+      state = State::READY_IDLE;
+      break;
 
-//     case State::FAULT:
-//     default:
-//       // We should never reach here because faultOverrun() halts.
-//       motorEnable(false);
-//       setHomeReady(false);
-//       break;
-//   }
-  bool homeActive = (digitalRead(PIN_HOME_SENSOR) == HIGH);
-
-  if (homeActive) {
-    // Move one way 20 steps
-    moveSteps(DIR_A, 20);
-    delay(500);
-
-    // Move back 20 steps
-    moveSteps(DIR_B, 20);
-    delay(500);
+    case State::FAULT:
+    default:
+      // We should never reach here because faultOverrun() halts.
+      motorEnable(false);
+      setHomeReady(false);
+      break;
   }
-  else {
-    // Do absolutely nothing
-    delay(50);
-  }
+
+
+///test code
+  // bool homeActive = (digitalRead(PIN_HOME_SENSOR) == HIGH);
+
+  // if (homeActive) {
+  //   // Move one way 20 steps
+  //   moveSteps(DIR_A, 20);
+  //   delay(500);
+
+  //   // Move back 20 steps
+  //   moveSteps(DIR_B, 20);
+  //   delay(500);
+  // }
+  // else {
+  //   // Do absolutely nothing
+  //   delay(50);
+  // }
 }
