@@ -573,7 +573,7 @@ void loop() {
     }
 
     case State::BOOT_HOMING: {
-      if (isOverrunActive()) faultOverrun("OVERRUN active at boot");
+      //if (isOverrunActive()) faultOverrun("OVERRUN active at boot");
 
       // Existing RAM homing (unchanged)
       doHoming();
