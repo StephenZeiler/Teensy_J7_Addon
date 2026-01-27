@@ -562,7 +562,7 @@ void loop() {
     // -------------------- NEW: wait for Arduino to command wheel homing --------------------
     case State::WAIT_WHEEL_HOME_CMD: {
       // Arduino holds pin24 HIGH while wheel should crawl toward home (Arduino sensor decides when to drop LOW)
-      if (digitalRead(PIN_WHEEL_HOME_CMD) == HIGH) {
+      if (true) {
         // When we receive HIGH on pin24:
         // 1) start RAM homing (existing behavior)
         // 2) then start wheel slow crawl, and keep crawling until pin24 goes LOW
@@ -580,7 +580,7 @@ void loop() {
 
       // NEW: if wheel system enabled and Arduino is commanding wheel homing, start wheel crawl
       if (ENABLE_WHEEL_SYSTEM) {
-        if (digitalRead(PIN_WHEEL_HOME_CMD) == HIGH) {
+        if (true) {
           // Start wheel crawling slowly (choose direction as needed)
           startWheelHomingMove(HIGH);
           state = State::WHEEL_HOMING_ACTIVE;
@@ -595,7 +595,7 @@ void loop() {
     case State::WHEEL_HOMING_ACTIVE: {
       // Keep wheel crawling while Arduino holds pin24 HIGH.
       // When Arduino sees wheel home sensor, it will drop pin24 LOW and we stop the wheel.
-      if (digitalRead(PIN_WHEEL_HOME_CMD) == LOW) {
+      if (millis() > 2000) {
         // Stop wheel immediately
         isMoving = false;
         digitalWrite(PIN_WHEEL_PUL, LOW);
@@ -627,7 +627,7 @@ void loop() {
         // We only allow indexing if the wheel has been homed by the pin24 sequence
         if (wheelHomed) {
           // Arduino sends pin25 HIGH to request "move wheel one slot"
-          if (digitalRead(PIN_WHEEL_INDEX_CMD) == HIGH && !isMoving) {
+          if (true && !isMoving) {
             // Start index move (choose direction as needed)
             startWheelIndexMove(HIGH);
             state = State::WHEEL_INDEXING;
