@@ -300,16 +300,15 @@ void setup() {
   pinMode(PIN_ENA, OUTPUT);
 
   // Sensors: default to pullups (common for mechanical switches / NPN sensors with open collector)
-  pinMode(PIN_HOME_SENSOR, INPUT_PULLDOWN);
-  pinMode(PIN_OVERRUN_SENSOR, INPUT_PULLDOWN);
+  pinMode(PIN_HOME_SENSOR, INPUT);
+  pinMode(PIN_OVERRUN_SENSOR, INPUT);
 
 
   // Arduino command input:
   // If Arduino drives a strong HIGH/LOW, plain INPUT is fine.
   // If you need a default LOW, you can use INPUT_PULLDOWN on many Teensy boards.
   //pinMode(PIN_INJECT_CMD, INPUT);
-    pinMode(PIN_INJECT_CMD, INPUT_PULLDOWN);
-
+    pinMode(PIN_INJECT_CMD, INPUT
   // Outputs to Arduino
   pinMode(PIN_HOME_READY, OUTPUT);
   pinMode(PIN_OVERRUN_ALARM, OUTPUT);
