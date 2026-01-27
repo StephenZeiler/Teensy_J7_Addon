@@ -73,7 +73,7 @@ constexpr uint16_t STEP_DELAY_US_SLOW  = 900; // (SLOW) used for final "creep" o
 // Logic polarity
 constexpr bool HOME_ACTIVE_LOW    = false; // HOME is "triggered" when HIGH
 constexpr bool OVERRUN_ACTIVE_LOW = false; // OVERRUN is "triggered" when HIGH
-constexpr bool ENA_ACTIVE_LOW     = false; // ENA LOW enables driver
+constexpr bool ENA_ACTIVE_LOW     = true; // ENA LOW enables driver
 
 // Safety timeouts to avoid infinite motion if a sensor fails (in steps)
 constexpr int HOMING_MAX_STEPS_CW  = 4000;
@@ -330,7 +330,7 @@ void setup() {
 }
 
 
-// test code
+//
 // constexpr uint16_t STEP_PULSE_US = 5;
 // constexpr uint16_t STEP_DELAY_US = 1500;
 // constexpr bool DIR_A = HIGH;
@@ -374,7 +374,7 @@ void loop() {
       if (injectCmd && isHomeActive()) {
       delay(150);               // small pause so we don't instantly re-trigger
       state = State::INJECTING;
-}
+      }
       break;
     }
 
