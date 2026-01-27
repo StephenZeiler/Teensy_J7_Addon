@@ -72,7 +72,7 @@ constexpr uint16_t STEP_DELAY_US_SLOW  = 900; // (SLOW) used for final "creep" o
 
 // Logic polarity
 constexpr bool HOME_ACTIVE_LOW    = true; // HOME is "triggered" when LOW
-constexpr bool OVERRUN_ACTIVE_LOW = true; // OVERRUN is "triggered" when LOW
+constexpr bool OVERRUN_ACTIVE_LOW = false; // OVERRUN is "triggered" when LOW
 constexpr bool ENA_ACTIVE_LOW     = true; // ENA LOW enables driver
 
 // Safety timeouts to avoid infinite motion if a sensor fails (in steps)
