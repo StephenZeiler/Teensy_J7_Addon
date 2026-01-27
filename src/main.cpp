@@ -24,7 +24,7 @@
   Arduino <-> Teensy signals:
     INJECT_CMD     (Arduino -> Teensy input)  -> Teensy pin 10
     HOME_READY     (Teensy -> Arduino output) -> Teensy pin 11
-    OVERRUN_ALARM  (Teensy -> Arduino output) -> Teensy pin 12
+    OVERRUN_ALARM  (Teensy  -> Arduino output) -> Teensy pin 12
 
   IMPORTANT: Sensor logic (active LOW vs active HIGH)
     This sketch defaults to INPUT_PULLUP and ACTIVE_LOW = true,
@@ -83,13 +83,53 @@ constexpr int HOMING_MAX_STEPS_CCW = 4000;
 constexpr uint16_t OVERRUN_ALARM_PULSE_MS = 1000;
 
 // -----------------------------------------------------
+//
+// -------------------- WHEEL MOTOR ADD-ON (NEW) --------------------
+//
+// Arduino -> Teensy control inputs:
+constexpr uint8_t PIN_WHEEL_HOME_CMD   = 24; // Arduino holds HIGH while wheel should "troll home"
+constexpr uint8_t PIN_WHEEL_INDEX_CMD  = 25; // Arduino commands: move wheel one slot (200 steps)
+
+// Teensy -> Arduino outputs:
+constexpr uint8_t PIN_WHEEL_READY      = 26; // Teensy pulses HIGH when wheel move complete
+constexpr uint8_t PIN_WHEEL_ERROR      = 27; // Teensy pulses HIGH if wheel position check fails
+
+// Wheel position sensor (to Teensy):
+constexpr uint8_t PIN_WHEEL_POS_OK     = 28; // LOW when wheel is in correct position
+
+// Wheel motor driver pins:
+constexpr uint8_t PIN_WHEEL_PUL = 5;
+constexpr uint8_t PIN_WHEEL_DIR = 6;
+constexpr uint8_t PIN_WHEEL_ENA = 7;
+
+// Wheel step counts:
+constexpr int WHEEL_STEPS_PER_SLOT = 200;
+
+// Wheel homing speed (slow constant delay between edges)
+// (This is used while PIN_WHEEL_HOME_CMD is HIGH; Arduino decides when to drop it LOW.)
+constexpr uint32_t WHEEL_HOME_STEP_DELAY_US = 1500;
+
+// DONE pulse widths (non-blocking)
+constexpr uint32_t WHEEL_READY_PULSE_US = 200000; // 200ms pulse
+constexpr uint32_t WHEEL_ERROR_PULSE_US = 1000000; // 1s pulse
+
+// If you want the old RAM pin10 test behavior, set this false.
+// When true, RAM injection is driven by wheel index sequence, not PIN_INJECT_CMD.
+constexpr bool ENABLE_WHEEL_SYSTEM = true;
+
+// -----------------------------------------------------
 
 enum class State {
   BOOT_HOMING,
   READY_IDLE,
   INJECTING,
   RETURNING,
-  FAULT
+  FAULT,
+
+  // NEW wheel-related states (added without removing your existing ones)
+  WAIT_WHEEL_HOME_CMD,
+  WHEEL_HOMING_ACTIVE,
+  WHEEL_INDEXING
 };
 
 State state = State::BOOT_HOMING;
@@ -291,6 +331,171 @@ void doInjectCycle() {
   faultOverrun("Missed HOME on return (exceeded 480+128 steps)");
 }
 
+// -------------------- WHEEL MOTOR (NEW) --------------------
+// Wheel driver enable (assume ENA LOW enables like ram driver; adjust if different)
+constexpr bool WHEEL_ENA_ACTIVE_LOW = true;
+inline void wheelEnable(bool en) {
+  if (WHEEL_ENA_ACTIVE_LOW) digitalWrite(PIN_WHEEL_ENA, en ? LOW : HIGH);
+  else                     digitalWrite(PIN_WHEEL_ENA, en ? HIGH : LOW);
+}
+inline bool wheelPosOkActive() {
+  // sensor goes LOW when wheel stops in correct position
+  return digitalRead(PIN_WHEEL_POS_OK) == LOW;
+}
+
+// Wheel stepping variables used by your provided pattern
+static const uint8_t stepPin = PIN_WHEEL_PUL;
+static const uint8_t dirPin  = PIN_WHEEL_DIR;
+
+static bool isMoving = false;
+static bool stepHigh = false;
+static uint32_t lastStepTime = 0;
+static uint32_t stepsTaken = 0;
+
+// Accel profile constants (you can tune these later)
+static const uint32_t MIN_STEP_DELAY = 350;   // fastest (us) during index move
+static const uint32_t MAX_STEP_DELAY = 1200;  // slowest (us) start/end during index move
+static const uint32_t ACCEL_STEPS    = 40;
+static const uint32_t DECEL_STEPS    = 40;
+
+// Index move target (200 steps per slot)
+static uint32_t TOTAL_STEPS = WHEEL_STEPS_PER_SLOT;
+
+// Homing mode flag (slow constant speed while Arduino holds pin24 HIGH)
+static bool wheelHomingMode = false;
+
+// DONE pulse timing (non-blocking)
+static const uint8_t donePin = PIN_WHEEL_READY;
+static bool donePulsing = false;
+static uint32_t donePulseStart = 0;
+static const uint32_t DONE_PULSE_US = WHEEL_READY_PULSE_US;
+
+// ERROR pulse timing (non-blocking)
+static bool errorPulsing = false;
+static uint32_t errorPulseStart = 0;
+
+static bool wheelHomed = false;
+
+// Called when a wheel move completes
+void finishMove(uint32_t currentTime) {
+  isMoving = false;
+  stepHigh = false;
+  digitalWrite(stepPin, LOW);
+
+  // pulse wheel ready to Arduino (non-blocking)
+  digitalWrite(donePin, HIGH);
+  donePulsing = true;
+  donePulseStart = currentTime;
+
+  // After an index move, verify wheel position sensor (pin 28 must be LOW)
+  // If still HIGH -> send error pulse on pin 27 and DO NOT inject.
+  if (!wheelHomingMode) {
+    if (!wheelPosOkActive()) {
+      digitalWrite(PIN_WHEEL_ERROR, HIGH);
+      errorPulsing = true;
+      errorPulseStart = currentTime;
+    }
+  }
+}
+
+// Start wheel move (index one slot)
+void startWheelIndexMove(bool dirLevel) {
+  digitalWrite(dirPin, dirLevel);
+  wheelEnable(true);
+
+  wheelHomingMode = false;
+  TOTAL_STEPS = WHEEL_STEPS_PER_SLOT;
+
+  isMoving = true;
+  stepHigh = false;
+  stepsTaken = 0;
+  lastStepTime = micros();
+  digitalWrite(stepPin, LOW);
+}
+
+// Start wheel homing move (slow constant stepping) - runs while pin24 stays HIGH
+void startWheelHomingMove(bool dirLevel) {
+  digitalWrite(dirPin, dirLevel);
+  wheelEnable(true);
+
+  wheelHomingMode = true;
+  // TOTAL_STEPS is unused in homing mode because we stop when pin24 goes LOW.
+  TOTAL_STEPS = 0;
+
+  isMoving = true;
+  stepHigh = false;
+  stepsTaken = 0;
+  lastStepTime = micros();
+  digitalWrite(stepPin, LOW);
+}
+
+// Your requested wheel motor stepping function (pattern preserved, no blocking loops)
+void stepMotor()
+{
+  unsigned long currentTime = micros();
+
+  if (isMoving)
+  {
+    unsigned long stepDelay;
+
+    // --- KEEP YOUR EXACT stepping math/shape ---
+    if (wheelHomingMode) {
+      // homing = slow constant stepping (Arduino decides when to stop by dropping pin24 LOW)
+      stepDelay = WHEEL_HOME_STEP_DELAY_US;
+    } else if (stepsTaken < ACCEL_STEPS)
+    {
+      float progress = (float)stepsTaken / ACCEL_STEPS;
+      stepDelay =
+        MAX_STEP_DELAY * pow((float)MIN_STEP_DELAY / MAX_STEP_DELAY, progress);
+    }
+    else
+    {
+      float progress =
+        (float)(stepsTaken - ACCEL_STEPS) / DECEL_STEPS;
+      stepDelay =
+        MIN_STEP_DELAY * pow((float)MAX_STEP_DELAY / MIN_STEP_DELAY, progress);
+    }
+
+    stepDelay = constrain(stepDelay, MIN_STEP_DELAY, MAX_STEP_DELAY);
+    // --- END exact behavior ---
+
+    if (currentTime - lastStepTime >= stepDelay)
+    {
+      if (!stepHigh)
+      {
+        digitalWrite(stepPin, HIGH);
+        stepHigh = true;
+      }
+      else
+      {
+        digitalWrite(stepPin, LOW);
+        stepHigh = false;
+        stepsTaken++;
+
+        if (!wheelHomingMode && stepsTaken >= TOTAL_STEPS)
+        {
+          finishMove(currentTime);
+        }
+      }
+      lastStepTime = currentTime;
+    }
+  }
+
+  // handle DONE pulse timing (non-blocking)
+  if (donePulsing && (currentTime - donePulseStart >= DONE_PULSE_US))
+  {
+    digitalWrite(donePin, LOW);
+    donePulsing = false;
+  }
+
+  // handle ERROR pulse timing (non-blocking)
+  if (errorPulsing && (currentTime - errorPulseStart >= WHEEL_ERROR_PULSE_US))
+  {
+    digitalWrite(PIN_WHEEL_ERROR, LOW);
+    errorPulsing = false;
+  }
+}
+
 void setup() {
   // Optional debugging:
   // Serial.begin(115200);
@@ -324,16 +529,88 @@ void setup() {
   // Start the 1us stepping timer (stepping change only)
   stepTimer.begin(stepperISR, 1);
 
+  // -------------------- WHEEL SETUP (NEW) --------------------
+  pinMode(PIN_WHEEL_PUL, OUTPUT);
+  pinMode(PIN_WHEEL_DIR, OUTPUT);
+  pinMode(PIN_WHEEL_ENA, OUTPUT);
+  digitalWrite(PIN_WHEEL_PUL, LOW);
+  digitalWrite(PIN_WHEEL_DIR, LOW);
+  wheelEnable(true);
+
+  pinMode(PIN_WHEEL_HOME_CMD, INPUT);   // Arduino drives HIGH/LOW
+  pinMode(PIN_WHEEL_INDEX_CMD, INPUT);  // Arduino drives HIGH/LOW
+  pinMode(PIN_WHEEL_READY, OUTPUT);
+  pinMode(PIN_WHEEL_ERROR, OUTPUT);
+  digitalWrite(PIN_WHEEL_READY, LOW);
+  digitalWrite(PIN_WHEEL_ERROR, LOW);
+
+  pinMode(PIN_WHEEL_POS_OK, INPUT_PULLUP); // sensor: LOW = OK
+  wheelHomed = false;
+
   // Start homing immediately
-  state = State::BOOT_HOMING;
+  // state = State::BOOT_HOMING;
+  // (NEW behavior when ENABLE_WHEEL_SYSTEM = true: wait for wheel home cmd first)
+  state = ENABLE_WHEEL_SYSTEM ? State::WAIT_WHEEL_HOME_CMD : State::BOOT_HOMING;
 }
 
 void loop() {
+  // Always service wheel stepping (non-blocking)
+  stepMotor();
+
   switch (state) {
+
+    // -------------------- NEW: wait for Arduino to command wheel homing --------------------
+    case State::WAIT_WHEEL_HOME_CMD: {
+      // Arduino holds pin24 HIGH while wheel should crawl toward home (Arduino sensor decides when to drop LOW)
+      if (digitalRead(PIN_WHEEL_HOME_CMD) == HIGH) {
+        // When we receive HIGH on pin24:
+        // 1) start RAM homing (existing behavior)
+        // 2) then start wheel slow crawl, and keep crawling until pin24 goes LOW
+        // This is not "perfectly simultaneous" because RAM homing is blocking, but Arduino can keep pin24 HIGH until wheel is home.
+        state = State::BOOT_HOMING;
+      }
+      break;
+    }
+
     case State::BOOT_HOMING: {
       if (isOverrunActive()) faultOverrun("OVERRUN active at boot");
+
+      // Existing RAM homing (unchanged)
       doHoming();
+
+      // NEW: if wheel system enabled and Arduino is commanding wheel homing, start wheel crawl
+      if (ENABLE_WHEEL_SYSTEM) {
+        if (digitalRead(PIN_WHEEL_HOME_CMD) == HIGH) {
+          // Start wheel crawling slowly (choose direction as needed)
+          startWheelHomingMove(HIGH);
+          state = State::WHEEL_HOMING_ACTIVE;
+          break;
+        }
+      }
+
       state = State::READY_IDLE;
+      break;
+    }
+
+    case State::WHEEL_HOMING_ACTIVE: {
+      // Keep wheel crawling while Arduino holds pin24 HIGH.
+      // When Arduino sees wheel home sensor, it will drop pin24 LOW and we stop the wheel.
+      if (digitalRead(PIN_WHEEL_HOME_CMD) == LOW) {
+        // Stop wheel immediately
+        isMoving = false;
+        digitalWrite(PIN_WHEEL_PUL, LOW);
+
+        wheelHomingMode = false;
+        wheelHomed = true;
+
+        // Homing complete only when:
+        //  - Arduino dropped pin24 LOW
+        //  - RAM is homed and is advertising HOME_READY on pin11 (setHomeReady(true) from doHoming)
+        // At this point HOME_READY should already be HIGH.
+        state = State::READY_IDLE;
+      } else {
+        // still homing, keep stepping via stepMotor()
+      }
       break;
     }
 
@@ -345,6 +622,21 @@ void loop() {
       // (If you want it strictly from logic, you can also do: setHomeReady(isHomeActive()); )
       setHomeReady(true);
 
+      // -------------------- NEW WHEEL SEQUENCE --------------------
+      if (ENABLE_WHEEL_SYSTEM) {
+        // We only allow indexing if the wheel has been homed by the pin24 sequence
+        if (wheelHomed) {
+          // Arduino sends pin25 HIGH to request "move wheel one slot"
+          if (digitalRead(PIN_WHEEL_INDEX_CMD) == HIGH && !isMoving) {
+            // Start index move (choose direction as needed)
+            startWheelIndexMove(HIGH);
+            state = State::WHEEL_INDEXING;
+          }
+        }
+        break; // when wheel system is enabled, injection is driven by wheel sequence
+      }
+
+      // -------------------- ORIGINAL RAM TRIGGER (kept) --------------------
       // Rising-edge detect on INJECT_CMD
       bool injectCmd = digitalRead(PIN_INJECT_CMD) == HIGH;
       // LEVEL-TRIGGERED:
@@ -353,6 +645,28 @@ void loop() {
       delay(150);               // small pause so we don't instantly re-trigger
       state = State::INJECTING;
 }
+      break;
+    }
+
+    case State::WHEEL_INDEXING: {
+      // Wheel steps non-blocking in stepMotor().
+      // When it finishes, finishMove() will pulse PIN_WHEEL_READY and optionally pulse PIN_WHEEL_ERROR.
+
+      // If wheel errored, do NOT inject (leave system idle so Arduino can react)
+      if (errorPulsing) {
+        // keep waiting until error pulse done; do not inject
+        if (!isMoving && !errorPulsing) {
+          state = State::READY_IDLE;
+        }
+        break;
+      }
+
+      // If wheel finished (not moving) and no error -> trigger RAM injection
+      if (!isMoving && !errorPulsing) {
+        // Wheel is positioned OK (pin28 LOW) so now activate the ram injection logic
+        delay(150); // keep your existing small pause behavior
+        state = State::INJECTING;
+      }
       break;
     }
 
@@ -373,6 +687,7 @@ void loop() {
       // We should never reach here because faultOverrun() halts.
       motorEnable(false);
       setHomeReady(false);
+      wheelEnable(false);
       break;
   }
 }
