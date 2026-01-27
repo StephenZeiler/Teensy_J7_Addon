@@ -4,10 +4,9 @@
 // =====================
 // PINS (Teensy 4.1)
 // =====================
-constexpr uint8_t PIN_WHEEL_PUL = 5;
-constexpr uint8_t PIN_WHEEL_DIR = 6;
-constexpr uint8_t PIN_WHEEL_ENA = 7;
-
+const int stepPin   = 5;   // STEP -> driver
+const int dirPin    = 6;   // DIR  -> driver
+const int enablePin = 7;   // ENA  -> driver (adjust active level if needed)
 // Uncomment later when you re-enable Arduino trigger
 // const int triggerPin = 5;  // Arduino output -> Teensy input
 
