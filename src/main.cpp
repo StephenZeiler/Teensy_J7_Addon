@@ -73,7 +73,7 @@ constexpr uint16_t STEP_DELAY_US_SLOW  = 900; // (SLOW) used for final "creep" o
 // Logic polarity
 constexpr bool HOME_ACTIVE_LOW    = false; // HOME is "triggered" when HIGH
 constexpr bool OVERRUN_ACTIVE_LOW = false; // OVERRUN is "triggered" when HIGH
-constexpr bool ENA_ACTIVE_LOW     = true; // ENA LOW enables driver
+constexpr bool ENA_ACTIVE_LOW     = false; // ENA LOW enables driver
 
 // Safety timeouts to avoid infinite motion if a sensor fails (in steps)
 constexpr int HOMING_MAX_STEPS_CW  = 4000;
@@ -228,11 +228,11 @@ void doHoming() {
       if (isOverrunActive()) faultOverrun("OVERRUN during homing (CW re-enter HOME)");
       stepOnce(STEP_PULSE_US_SLOW, STEP_DELAY_US_SLOW);
     }
-    // We are now at HOME (LOW) precisely.
+
   }
   // --- CASE B: On power-up, HOME is HIGH (not at home) ---
   else {
-    // Move CW until HOME goes LOW. If OVERRUN hits first, fault.
+
     setDir(DIR_CW);
     int steps = 0;
     while (!isHomeActive()) {
@@ -240,7 +240,7 @@ void doHoming() {
       if (isOverrunActive()) faultOverrun("OVERRUN hit before HOME during homing (CW)");
       stepOnce(STEP_PULSE_US_FAST, STEP_DELAY_US_FAST);
     }
-    // HOME is now LOW -> exactly at home per your spec.
+
   }
 
   // --- Overrun sensor sanity check (move CW 128, verify overrun not triggered, return) ---
@@ -256,7 +256,7 @@ void doHoming() {
   // Go back to HOME by moving CCW 128 steps.
   moveStepsWithOverrunWatch(DIR_CCW, STEPS_EXTRA_SEARCH, STEP_PULSE_US_FAST, STEP_DELAY_US_FAST);
 
-  // Confirm we are still at home (HOME should be active/LOW)
+
   if (!isHomeActive()) {
     // Not necessarily "overrun", but it's a hard fault in practice
     faultOverrun("Failed to return to HOME after sanity check");
