@@ -48,7 +48,7 @@ constexpr uint8_t PIN_DIR = 3;
 constexpr uint8_t PIN_ENA = 4;
 
 // Sensor pins
-constexpr uint8_t PIN_HOME_SENSOR    = 29;
+constexpr uint8_t PIN_HOME_SENSOR = 29;
 constexpr uint8_t PIN_OVERRUN_SENSOR = 30;
 
 // Arduino handshake pins
@@ -300,8 +300,8 @@ void setup() {
   pinMode(PIN_ENA, OUTPUT);
 
   // Sensors: default to pullups (common for mechanical switches / NPN sensors with open collector)
-  pinMode(PIN_HOME_SENSOR, INPUT_PULLUP);
-  pinMode(PIN_OVERRUN_SENSOR, INPUT_PULLUP);
+  pinMode(PIN_HOME_SENSOR, INPUT_PULLDOWN);
+  pinMode(PIN_OVERRUN_SENSOR, INPUT_PULLDOWN);
 
 
   // Arduino command input:
