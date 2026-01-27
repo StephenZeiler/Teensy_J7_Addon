@@ -48,8 +48,8 @@ constexpr uint8_t PIN_DIR = 3;
 constexpr uint8_t PIN_ENA = 4;
 
 // Sensor pins
-constexpr uint8_t PIN_HOME_SENSOR    = 8;
-constexpr uint8_t PIN_OVERRUN_SENSOR = 9;
+constexpr uint8_t PIN_HOME_SENSOR    = 29;
+constexpr uint8_t PIN_OVERRUN_SENSOR = 30;
 
 // Arduino handshake pins
 constexpr uint8_t PIN_INJECT_CMD    = 10; // Arduino -> Teensy (input)
