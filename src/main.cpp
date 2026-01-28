@@ -78,7 +78,7 @@ const int WHEEL_STEPS_PER_SLOT = 200;  // Steps to move one wheel slot
 const int WHEEL_TROLL_SPEED = 1000;    // Microseconds between steps when trolling home
 
 // Test mode - set to true for automatic continuous injection, false for normal Arduino control
-const bool TEST_MODE = true;
+const bool TEST_MODE = false;
 
 // Direction definitions
 const bool CLOCKWISE = LOW;
@@ -272,6 +272,12 @@ void performRamHomingSequence() {
 void performInjectionCycle() {
   Serial.println("Starting injection cycle...");
   
+  // Check sensors before starting
+  Serial.print("Pre-injection check - Home sensor: ");
+  Serial.print(digitalRead(HOME_SENSOR) ? "HIGH" : "LOW");
+  Serial.print(", Overrun sensor: ");
+  Serial.println(digitalRead(OVERRUN_SENSOR) ? "HIGH" : "LOW");
+  
   // Move clockwise to inject bulb
   Serial.print("Injecting: Moving CLOCKWISE ");
   Serial.print(INJECT_STEPS);
@@ -279,10 +285,22 @@ void performInjectionCycle() {
   
   setDirection(CLOCKWISE);
   for (int i = 0; i < INJECT_STEPS; i++) {
+    // Check for overrun during injection
+    if (digitalRead(OVERRUN_SENSOR) == HIGH) {
+      Serial.print("ERROR: Overrun sensor triggered during INJECTION at step ");
+      Serial.println(i);
+      triggerOverrunAlarm();
+      readyForProduction = false;
+      return;
+    }
     stepMotor(STEP_DELAY);
   }
   
   Serial.println("Injection complete - returning to home");
+  Serial.print("After injection - Home sensor: ");
+  Serial.print(digitalRead(HOME_SENSOR) ? "HIGH" : "LOW");
+  Serial.print(", Overrun sensor: ");
+  Serial.println(digitalRead(OVERRUN_SENSOR) ? "HIGH" : "LOW");
   
   // Return counter-clockwise to home
   Serial.print("Returning: Moving COUNTER-CLOCKWISE ");
@@ -296,7 +314,8 @@ void performInjectionCycle() {
   for (int i = 0; i < INJECT_STEPS; i++) {
     // Check for overrun during return
     if (digitalRead(OVERRUN_SENSOR) == HIGH) {
-      Serial.println("ERROR: Overrun sensor triggered during return!");
+      Serial.print("ERROR: Overrun sensor triggered during RETURN at step ");
+      Serial.println(i);
       triggerOverrunAlarm();
       readyForProduction = false;
       return;
@@ -306,7 +325,8 @@ void performInjectionCycle() {
     
     // Check if we reached home
     if (digitalRead(HOME_SENSOR) == HIGH && !reachedHome) {
-      Serial.println("Home sensor detected during return");
+      Serial.print("Home sensor detected during return at step ");
+      Serial.println(i);
       reachedHome = true;
     }
   }
@@ -343,6 +363,10 @@ void performInjectionCycle() {
   }
   
   Serial.println("Successfully returned to home");
+  Serial.print("Final position - Home sensor: ");
+  Serial.print(digitalRead(HOME_SENSOR) ? "HIGH" : "LOW");
+  Serial.print(", Overrun sensor: ");
+  Serial.println(digitalRead(OVERRUN_SENSOR) ? "HIGH" : "LOW");
   Serial.println("Ready for next cycle\n");
   
   // Signal Arduino that ram is ready again
@@ -391,17 +415,23 @@ void moveWheelOneSlot() {
   
   Serial.println("Wheel movement complete");
   
-  // Check wheel position sensor
-  Serial.println("Checking wheel position sensor...");
-  if (digitalRead(WHEEL_POSITION_SENSOR) == LOW) {
-    Serial.println("Wheel position sensor: CORRECT (LOW)");
+  // Check wheel position sensor (bypass in TEST_MODE since Arduino isn't connected)
+  if (TEST_MODE) {
+    Serial.println("TEST_MODE: Skipping wheel position sensor check");
     Serial.println("Wheel is ready for injection\n");
-    
-    // Signal Arduino that wheel is ready
     digitalWrite(WHEEL_READY_NOTIFICATION, HIGH);
   } else {
-    Serial.println("ERROR: Wheel position sensor still HIGH!");
-    triggerWheelPositionAlarm();
+    Serial.println("Checking wheel position sensor...");
+    if (digitalRead(WHEEL_POSITION_SENSOR) == LOW) {
+      Serial.println("Wheel position sensor: CORRECT (LOW)");
+      Serial.println("Wheel is ready for injection\n");
+      
+      // Signal Arduino that wheel is ready
+      digitalWrite(WHEEL_READY_NOTIFICATION, HIGH);
+    } else {
+      Serial.println("ERROR: Wheel position sensor still HIGH!");
+      triggerWheelPositionAlarm();
+    }
   }
 }
 
