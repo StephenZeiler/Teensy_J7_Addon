@@ -1,3 +1,4 @@
+#include <Arduino.h>
 /*
  * Bulb Ram Controller - Teensy Code
  * 
@@ -79,26 +80,6 @@ void setup() {
   
   // Perform initial homing sequence
   performHomingSequence();
-}
-
-void loop() {
-  if (readyForProduction) {
-    // Check for inject command from Arduino
-    int injectSignal = digitalRead(INJECT_COMMAND);
-    
-    // Detect rising edge of inject command
-    if (injectSignal == HIGH && lastInjectCommand == LOW) {
-      Serial.println("\n>>> INJECT COMMAND RECEIVED <<<");
-      digitalWrite(HOME_NOTIFICATION, LOW); // Clear ready signal
-      
-      // Perform injection cycle
-      performInjectionCycle();
-    }
-    
-    lastInjectCommand = injectSignal;
-  }
-  
-  delay(10); // Small delay to prevent excessive polling
 }
 
 void performHomingSequence() {
@@ -327,3 +308,23 @@ void triggerOverrunAlarm() {
     delay(1000);
   }
 }
+void loop() {
+  if (readyForProduction) {
+    // Check for inject command from Arduino
+    int injectSignal = digitalRead(INJECT_COMMAND);
+    
+    // Detect rising edge of inject command
+    if (injectSignal == HIGH && lastInjectCommand == LOW) {
+      Serial.println("\n>>> INJECT COMMAND RECEIVED <<<");
+      digitalWrite(HOME_NOTIFICATION, LOW); // Clear ready signal
+      
+      // Perform injection cycle
+      performInjectionCycle();
+    }
+    
+    lastInjectCommand = injectSignal;
+  }
+  
+  delay(10); // Small delay to prevent excessive polling
+}
+
