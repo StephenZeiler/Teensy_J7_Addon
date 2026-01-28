@@ -108,11 +108,6 @@ inline void setHomeReady(bool ready) {
   digitalWrite(PIN_HOME_READY, ready ? HIGH : LOW);
 }
 
-inline void motorEnable(bool en) {
-  // ENA polarity handling
-  if (ENA_ACTIVE_LOW) digitalWrite(PIN_ENA, en ? LOW : HIGH);
-  else                digitalWrite(PIN_ENA, en ? HIGH : LOW);
-}
 
 inline void setDir(bool dir) {
   digitalWrite(PIN_DIR, dir);
@@ -178,7 +173,6 @@ inline void stepOnce(uint16_t pulseHighUs, uint16_t stepDelayUs) {
 [[noreturn]] void faultOverrun(const char* reason) {
   // Stop outputs / disable motor
   setHomeReady(false);
-  motorEnable(false);
 
   // Pulse alarm to Arduino for 1 second
   digitalWrite(PIN_OVERRUN_ALARM, HIGH);
@@ -207,7 +201,6 @@ void moveStepsWithOverrunWatch(bool dir, int steps, uint16_t pulseUs, uint16_t d
 // Homing routine described in your message
 void doHoming() {
   setHomeReady(false);
-  motorEnable(true);
 
   // --- CASE A: On power-up, HOME is LOW (we are on/near the home sensor) ---
   if (isHomeActive()) {
@@ -269,7 +262,6 @@ void doHoming() {
 // Do one injection cycle: CCW 480 (inject) then CW back to HOME (max 480+128)
 void doInjectCycle() {
   setHomeReady(false);
-  motorEnable(true);
 
   // Inject: from HOME go CCW 480 steps
   moveStepsWithOverrunWatch(DIR_CCW, STEPS_INJECT, STEP_PULSE_US_FAST, STEP_DELAY_US_FAST);
@@ -313,14 +305,13 @@ void setup() {
   // Outputs to Arduino
   pinMode(PIN_HOME_READY, OUTPUT);
   pinMode(PIN_OVERRUN_ALARM, OUTPUT);
-
+  digitalWrite(PIN_ENA, HIGH);
   digitalWrite(PIN_OVERRUN_ALARM, LOW);
   setHomeReady(false);
 
   // Motor initial
   digitalWrite(PIN_PUL, LOW);
   setDir(DIR_CW);
-  motorEnable(true);
 
   // Start the 1us stepping timer (stepping change only)
   stepTimer.begin(stepperISR, 1);
@@ -330,89 +321,87 @@ void setup() {
 }
 
 
+//
+// constexpr uint16_t STEP_PULSE_US = 5;
+// constexpr uint16_t STEP_DELAY_US = 1500;
+// constexpr bool DIR_A = HIGH;
+// constexpr bool DIR_B = LOW;
+// void stepOnce() {
+//   digitalWrite(PIN_PUL, HIGH);
+//   delayMicroseconds(STEP_PULSE_US);
+//   digitalWrite(PIN_PUL, LOW);
+//   delayMicroseconds(STEP_DELAY_US);
+// }
 
-constexpr uint16_t STEP_PULSE_US = 5;
-constexpr uint16_t STEP_DELAY_US = 1500;
-constexpr bool DIR_A = HIGH;
-constexpr bool DIR_B = LOW;
-void stepOnce() {
-  digitalWrite(PIN_PUL, HIGH);
-  delayMicroseconds(STEP_PULSE_US);
-  digitalWrite(PIN_PUL, LOW);
-  delayMicroseconds(STEP_DELAY_US);
-}
-
-// ---- MOVE N STEPS ----
-void moveSteps(bool dir, int steps) {
-  digitalWrite(PIN_DIR, dir);
-  for (int i = 0; i < steps; i++) {
-    stepOnce();
-  }
-}
-
+// // ---- MOVE N STEPS ----
+// void moveSteps(bool dir, int steps) {
+//   digitalWrite(PIN_DIR, dir);
+//   for (int i = 0; i < steps; i++) {
+//     stepOnce();
+//   }
+// }
+//
 void loop() {
-  // switch (state) {
-  //   case State::BOOT_HOMING: {
-  //     if (isOverrunActive()) faultOverrun("OVERRUN active at boot");
-  //     doHoming();
-  //     state = State::READY_IDLE;
-  //     break;
-  //   }
+  switch (state) {
+    case State::BOOT_HOMING: {
+      if (isOverrunActive()) faultOverrun("OVERRUN active at boot");
+      doHoming();
+      state = State::READY_IDLE;
+      break;
+    }
 
-  //   case State::READY_IDLE: {
-  //     // In production, continuously verify overrun isn't hit
-  //     if (isOverrunActive()) faultOverrun("OVERRUN during READY_IDLE");
+    case State::READY_IDLE: {
+      // In production, continuously verify overrun isn't hit
+      if (isOverrunActive()) faultOverrun("OVERRUN during READY_IDLE");
 
-  //     // Keep HOME_READY asserted when we are truly home
-  //     // (If you want it strictly from logic, you can also do: setHomeReady(isHomeActive()); )
-  //     setHomeReady(true);
+      // Keep HOME_READY asserted when we are truly home
+      // (If you want it strictly from logic, you can also do: setHomeReady(isHomeActive()); )
+      setHomeReady(true);
 
-  //     // Rising-edge detect on INJECT_CMD
-  //     bool injectCmd = digitalRead(PIN_INJECT_CMD) == HIGH;
-  //     // LEVEL-TRIGGERED:
-  //     // If pin10 is HIGH and we are at HOME, inject again
-  //     if (injectCmd && isHomeActive()) {
-  //     delay(150);               // small pause so we don't instantly re-trigger
-  //     state = State::INJECTING;
-  //     }
-  //     break;
-  //   }
+      // Rising-edge detect on INJECT_CMD
+      bool injectCmd = digitalRead(PIN_INJECT_CMD) == HIGH;
+      // LEVEL-TRIGGERED:
+      // If pin10 is HIGH and we are at HOME, inject again
+      if (injectCmd && isHomeActive()) {
+      delay(150);               // small pause so we don't instantly re-trigger
+      state = State::INJECTING;
+      }
+      break;
+    }
 
-  //   case State::INJECTING: {
-  //     doInjectCycle();
-  //     // After cycle, we should be home and HOME_READY already set HIGH by doInjectCycle()
-  //     state = State::READY_IDLE;
-  //     break;
-  //   }
+    case State::INJECTING: {
+      doInjectCycle();
+      // After cycle, we should be home and HOME_READY already set HIGH by doInjectCycle()
+      state = State::READY_IDLE;
+      break;
+    }
 
-  //   case State::RETURNING:
-  //     // Not used (kept for future expansion)
-  //     state = State::READY_IDLE;
-  //     break;
+    case State::RETURNING:
+      // Not used (kept for future expansion)
+      state = State::READY_IDLE;
+      break;
 
-  //   case State::FAULT:
-  //   default:
-  //     // We should never reach here because faultOverrun() halts.
-  //     motorEnable(false);
-  //     setHomeReady(false);
-  //     break;
-  // }
+    case State::FAULT:
+    default:
+      setHomeReady(false);
+      break;
+  }
 
 
 ///test code
-  //bool homeActive = (digitalRead(PIN_HOME_SENSOR) == HIGH);
-bool homeActive = true;
-  if (true) {
-    // Move one way 20 steps
-    moveSteps(DIR_A, 100);
-    delay(500);
+  // bool homeActive = (digitalRead(PIN_HOME_SENSOR) == HIGH);
 
-    // Move back 20 steps
-    moveSteps(DIR_B, 100);
-    delay(500);
-  }
-  else {
-    // Do absolutely nothing
-    delay(50);
-  }
+  // if (homeActive) {
+  //   // Move one way 20 steps
+  //   moveSteps(DIR_A, 20);
+  //   delay(500);
+
+  //   // Move back 20 steps
+  //   moveSteps(DIR_B, 20);
+  //   delay(500);
+  // }
+  // else {
+  //   // Do absolutely nothing
+  //   delay(50);
+  // }
 }
