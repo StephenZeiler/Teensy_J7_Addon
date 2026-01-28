@@ -47,41 +47,38 @@ const bool COUNTER_CLOCKWISE = LOW;
 bool isHomed = false;
 bool readyForProduction = false;
 int lastInjectCommand = LOW;
-
-void setup() {
-  Serial.begin(115200);
-  delay(1000);
-  
-  Serial.println("=================================");
-  Serial.println("Bulb Ram Controller Starting...");
-  Serial.println("=================================");
-  
-  // Configure motor pins
-  pinMode(DIR_PIN, OUTPUT);
-  pinMode(PUL_PIN, OUTPUT);
-  pinMode(ENA_PIN, OUTPUT);
-  
-  // Configure sensor pins
-  pinMode(HOME_SENSOR, INPUT);
-  pinMode(OVERRUN_SENSOR, INPUT);
-  
-  // Configure communication pins
-  pinMode(HOME_NOTIFICATION, OUTPUT);
-  pinMode(INJECT_COMMAND, INPUT);
-  pinMode(OVERRUN_ALARM, OUTPUT);
-  
-  // Initialize outputs to LOW
-  digitalWrite(HOME_NOTIFICATION, LOW);
-  digitalWrite(OVERRUN_ALARM, LOW);
-  digitalWrite(ENA_PIN, LOW); // Enable motor (active low for most drivers)
-  
-  Serial.println("Hardware initialized");
-  Serial.println("Beginning homing sequence...\n");
-  
-  // Perform initial homing sequence
-  performHomingSequence();
+void setDirection(bool dir) {
+  digitalWrite(DIR_PIN, dir);
+  delayMicroseconds(5); // Small delay for direction change
 }
 
+void stepMotor(int delayTime) {
+  digitalWrite(PUL_PIN, HIGH);
+  delayMicroseconds(delayTime);
+  digitalWrite(PUL_PIN, LOW);
+  delayMicroseconds(delayTime);
+}
+
+void triggerOverrunAlarm() {
+  Serial.println("\n!!! OVERRUN ALARM TRIGGERED !!!");
+  Serial.println("Sending alarm signal to Arduino...");
+  
+  digitalWrite(HOME_NOTIFICATION, LOW);
+  digitalWrite(OVERRUN_ALARM, HIGH);
+  delay(1000);
+  digitalWrite(OVERRUN_ALARM, LOW);
+  
+  Serial.println("Machine stopped - manual intervention required");
+  Serial.println("Please reset the system after correcting the issue\n");
+  
+  // Disable motor
+  digitalWrite(ENA_PIN, HIGH);
+  
+  // Halt execution
+  while(1) {
+    delay(1000);
+  }
+}
 void performHomingSequence() {
   Serial.println("--- HOMING SEQUENCE START ---");
   
@@ -276,38 +273,41 @@ void performInjectionCycle() {
   digitalWrite(HOME_NOTIFICATION, HIGH);
 }
 
-void setDirection(bool dir) {
-  digitalWrite(DIR_PIN, dir);
-  delayMicroseconds(5); // Small delay for direction change
-}
 
-void stepMotor(int delayTime) {
-  digitalWrite(PUL_PIN, HIGH);
-  delayMicroseconds(delayTime);
-  digitalWrite(PUL_PIN, LOW);
-  delayMicroseconds(delayTime);
-}
-
-void triggerOverrunAlarm() {
-  Serial.println("\n!!! OVERRUN ALARM TRIGGERED !!!");
-  Serial.println("Sending alarm signal to Arduino...");
-  
-  digitalWrite(HOME_NOTIFICATION, LOW);
-  digitalWrite(OVERRUN_ALARM, HIGH);
+void setup() {
+  Serial.begin(115200);
   delay(1000);
+  
+  Serial.println("=================================");
+  Serial.println("Bulb Ram Controller Starting...");
+  Serial.println("=================================");
+  
+  // Configure motor pins
+  pinMode(DIR_PIN, OUTPUT);
+  pinMode(PUL_PIN, OUTPUT);
+  pinMode(ENA_PIN, OUTPUT);
+  
+  // Configure sensor pins
+  pinMode(HOME_SENSOR, INPUT);
+  pinMode(OVERRUN_SENSOR, INPUT);
+  
+  // Configure communication pins
+  pinMode(HOME_NOTIFICATION, OUTPUT);
+  pinMode(INJECT_COMMAND, INPUT);
+  pinMode(OVERRUN_ALARM, OUTPUT);
+  
+  // Initialize outputs to LOW
+  digitalWrite(HOME_NOTIFICATION, LOW);
   digitalWrite(OVERRUN_ALARM, LOW);
+  digitalWrite(ENA_PIN, LOW); // Enable motor (active low for most drivers)
   
-  Serial.println("Machine stopped - manual intervention required");
-  Serial.println("Please reset the system after correcting the issue\n");
+  Serial.println("Hardware initialized");
+  Serial.println("Beginning homing sequence...\n");
   
-  // Disable motor
-  digitalWrite(ENA_PIN, HIGH);
-  
-  // Halt execution
-  while(1) {
-    delay(1000);
-  }
+  // Perform initial homing sequence
+  performHomingSequence();
 }
+
 void loop() {
   if (readyForProduction) {
     // Check for inject command from Arduino
