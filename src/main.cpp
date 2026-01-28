@@ -39,6 +39,9 @@ const int INJECT_STEPS = 480;      // Steps to inject one bulb
 const int OVERRUN_CHECK_STEPS = 128; // Steps to verify overrun sensor
 const int SAFETY_MARGIN_STEPS = 128; // Additional steps before declaring error
 
+// Test mode - set to true for automatic continuous injection, false for normal Arduino control
+const bool TEST_MODE = true;
+
 // Direction definitions
 const bool CLOCKWISE = LOW;
 const bool COUNTER_CLOCKWISE = HIGH;
@@ -275,6 +278,7 @@ void performInjectionCycle() {
   digitalWrite(HOME_NOTIFICATION, HIGH);
 }
 
+
 void setup() {
   Serial.begin(115200);
   delay(1000);
@@ -311,19 +315,27 @@ void setup() {
 
 void loop() {
   if (readyForProduction) {
-    // Check for inject command from Arduino
-    int injectSignal = digitalRead(INJECT_COMMAND);
-    
-    // Detect rising edge of inject command
-    if (injectSignal == HIGH && lastInjectCommand == LOW) {
-      Serial.println("\n>>> INJECT COMMAND RECEIVED <<<");
-      digitalWrite(HOME_NOTIFICATION, LOW); // Clear ready signal
-      
-      // Perform injection cycle
+    if (TEST_MODE) {
+      // Auto-inject continuously with 2 second delay between cycles
+      Serial.println("\n>>> TEST MODE: AUTO INJECT <<<");
+      digitalWrite(HOME_NOTIFICATION, LOW);
       performInjectionCycle();
+      delay(2000); // Wait 2 seconds before next injection
+    } else {
+      // Normal Arduino command detection
+      int injectSignal = digitalRead(INJECT_COMMAND);
+      
+      // Detect rising edge of inject command
+      if (injectSignal == HIGH && lastInjectCommand == LOW) {
+        Serial.println("\n>>> INJECT COMMAND RECEIVED <<<");
+        digitalWrite(HOME_NOTIFICATION, LOW); // Clear ready signal
+        
+        // Perform injection cycle
+        performInjectionCycle();
+      }
+      
+      lastInjectCommand = injectSignal;
     }
-    
-    lastInjectCommand = injectSignal;
   }
   
   delay(10); // Small delay to prevent excessive polling
