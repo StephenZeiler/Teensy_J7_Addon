@@ -40,13 +40,14 @@ const int OVERRUN_CHECK_STEPS = 128; // Steps to verify overrun sensor
 const int SAFETY_MARGIN_STEPS = 128; // Additional steps before declaring error
 
 // Direction definitions
-const bool CLOCKWISE = HIGH;
-const bool COUNTER_CLOCKWISE = LOW;
+const bool CLOCKWISE = LOW;
+const bool COUNTER_CLOCKWISE = HIGH;
 
 // State variables
 bool isHomed = false;
 bool readyForProduction = false;
 int lastInjectCommand = LOW;
+
 void setDirection(bool dir) {
   digitalWrite(DIR_PIN, dir);
   delayMicroseconds(5); // Small delay for direction change
@@ -79,6 +80,7 @@ void triggerOverrunAlarm() {
     delay(1000);
   }
 }
+
 void performHomingSequence() {
   Serial.println("--- HOMING SEQUENCE START ---");
   
@@ -273,7 +275,6 @@ void performInjectionCycle() {
   digitalWrite(HOME_NOTIFICATION, HIGH);
 }
 
-
 void setup() {
   Serial.begin(115200);
   delay(1000);
@@ -327,4 +328,3 @@ void loop() {
   
   delay(10); // Small delay to prevent excessive polling
 }
-
