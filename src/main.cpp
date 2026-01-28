@@ -404,11 +404,11 @@ void loop() {
 bool homeActive = true;
   if (true) {
     // Move one way 20 steps
-    moveSteps(DIR_A, 20);
+    moveSteps(DIR_A, 100);
     delay(500);
 
     // Move back 20 steps
-    moveSteps(DIR_B, 20);
+    moveSteps(DIR_B, 100);
     delay(500);
   }
   else {
