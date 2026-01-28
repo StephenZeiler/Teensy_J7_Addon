@@ -193,8 +193,8 @@ void setup() {
   pinMode(PIN_DIR, OUTPUT);
   pinMode(PIN_ENA, OUTPUT);
 
-  pinMode(PIN_HOME_SENSOR, INPUT);
-  pinMode(PIN_OVERRUN_SENSOR, INPUT);
+  pinMode(PIN_HOME_SENSOR, INPUT_PULLUP);
+  pinMode(PIN_OVERRUN_SENSOR, INPUT_PULLUP);
 
   pinMode(PIN_INJECT_CMD, INPUT_PULLUP);
 
