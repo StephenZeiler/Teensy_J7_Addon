@@ -24,7 +24,7 @@ const int PUL_PIN = 2;
 const int ENA_PIN = 4;
 
 // Sensor pins
-const int HOME_SENSOR = 28;
+const int HOME_SENSOR = 32;
 const int OVERRUN_SENSOR = 30;
 
 // Arduino communication pins
