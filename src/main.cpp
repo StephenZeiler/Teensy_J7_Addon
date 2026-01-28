@@ -1,88 +1,35 @@
-/*  Teensy Bulb Ram Controller (Stepper + Home + Overrun + Arduino handshake)
-
-  WHAT THIS DOES
-  1) On power-up, find a precise HOME position using HOME sensor (+ OVERRUN safety).
-  2) After homing, do a quick "overrun sensor sanity check" by moving CW 128 steps and back.
-  3) In production:
-      - Teensy asserts HOME_READY HIGH when ram is home and ready
-      - Arduino pulses INJECT_CMD HIGH to request one bulb injection
-      - Teensy performs:
-          CCW 480 steps (inject)
-          then CW until HOME is found (max 480+128 steps)
-      - If OVERRUN triggers at any time -> alarm Arduino and stop/disable motor.
-
-  PIN LAYOUT (suggested)
-  Motor driver:
-    PUL (step)  -> Teensy pin 2
-    DIR         -> Teensy pin 3
-    ENA         -> Teensy pin 4
-
-  Sensors (to Teensy inputs):
-    HOME_SENSOR    -> Teensy pin 8
-    OVERRUN_SENSOR -> Teensy pin 9
-
-  Arduino <-> Teensy signals:
-    INJECT_CMD     (Arduino -> Teensy input)  -> Teensy pin 10
-    HOME_READY     (Teensy -> Arduino output) -> Teensy pin 11
-    OVERRUN_ALARM  (Teensy -> Arduino output) -> Teensy pin 12
-
-  IMPORTANT: Sensor logic (active LOW vs active HIGH)
-    This sketch defaults to INPUT_PULLUP and ACTIVE_LOW = true,
-    meaning:
-      - HOME sensor reads LOW when "at home"
-      - OVERRUN sensor reads LOW when "overrun hit"
-    If your sensors are opposite, flip the *_ACTIVE_LOW constants below.
-
-  IMPORTANT: ENA polarity
-    Many stepper drivers use ENA = LOW to enable. This sketch assumes that.
-    If yours is opposite, flip ENA_ACTIVE_LOW.
-*/
-
 #include <Arduino.h>
 #include <IntervalTimer.h>
 
-// -------------------- USER CONFIG --------------------
-// Motor pins (as you requested)
 constexpr uint8_t PIN_PUL = 2;
 constexpr uint8_t PIN_DIR = 3;
 constexpr uint8_t PIN_ENA = 4;
 
-// Sensor pins
 constexpr uint8_t PIN_HOME_SENSOR = 29;
 constexpr uint8_t PIN_OVERRUN_SENSOR = 30;
 
-// Arduino handshake pins
-constexpr uint8_t PIN_INJECT_CMD    = 10; // Arduino -> Teensy (input)
-constexpr uint8_t PIN_HOME_READY    = 11; // Teensy  -> Arduino (output)
-constexpr uint8_t PIN_OVERRUN_ALARM = 12; // Teensy  -> Arduino (output)
+constexpr uint8_t PIN_INJECT_CMD    = 10;
+constexpr uint8_t PIN_HOME_READY    = 11;
+constexpr uint8_t PIN_OVERRUN_ALARM = 12;
 
-// Direction definitions (change if your mechanics are flipped)
-constexpr bool DIR_CW  = HIGH;   // flipped
-constexpr bool DIR_CCW = LOW;  // flipped
+constexpr bool DIR_CW  = HIGH;
+constexpr bool DIR_CCW = LOW;
 
-// Step counts
-constexpr int STEPS_INJECT       = 480; // from home to inject
-constexpr int STEPS_EXTRA_SEARCH = 128; // extra allowance to find home on return + overrun check travel
+constexpr int STEPS_INJECT       = 480;
+constexpr int STEPS_EXTRA_SEARCH = 128;
 
-// Speed tuning (microseconds). Increase for slower/safer.
-constexpr uint16_t STEP_PULSE_US_FAST  = 6;   // step HIGH time
-constexpr uint16_t STEP_DELAY_US_FAST  = 300; // time between steps (FAST)
+constexpr uint16_t STEP_PULSE_US_FAST  = 6;
+constexpr uint16_t STEP_DELAY_US_FAST  = 300;
 constexpr uint16_t STEP_PULSE_US_SLOW  = 6;
-constexpr uint16_t STEP_DELAY_US_SLOW  = 900; // (SLOW) used for final "creep" onto home
+constexpr uint16_t STEP_DELAY_US_SLOW  = 900;
 
-// Logic polarity
-constexpr bool HOME_ACTIVE_LOW    = false; // HOME is "triggered" when HIGH
-constexpr bool OVERRUN_ACTIVE_LOW = false; // OVERRUN is "triggered" when HIGH
-constexpr bool ENA_ACTIVE_LOW     = false; // ENA LOW enables driver
+constexpr bool HOME_ACTIVE_LOW    = false;
+constexpr bool OVERRUN_ACTIVE_LOW = false;
 
-// Safety timeouts to avoid infinite motion if a sensor fails (in steps)
 constexpr int HOMING_MAX_STEPS_CW  = 4000;
 constexpr int HOMING_MAX_STEPS_CCW = 4000;
 
-// Alarm behavior
 constexpr uint16_t OVERRUN_ALARM_PULSE_MS = 1000;
-
-// -----------------------------------------------------
 
 enum class State {
   BOOT_HOMING,
@@ -96,35 +43,25 @@ State state = State::BOOT_HOMING;
 
 inline bool isHomeActive() {
   bool v = digitalRead(PIN_HOME_SENSOR);
-  return HOME_ACTIVE_LOW ? (v == LOW) : (v == HIGH);
+  return HOME_ACTIVE_LOW ? (v == HIGH) : (v == LOW);
 }
 
 inline bool isOverrunActive() {
   bool v = digitalRead(PIN_OVERRUN_SENSOR);
-  return OVERRUN_ACTIVE_LOW ? (v == LOW) : (v == HIGH);
+  return OVERRUN_ACTIVE_LOW ? (v == HIGH) : (v == LOW);
 }
 
 inline void setHomeReady(bool ready) {
   digitalWrite(PIN_HOME_READY, ready ? HIGH : LOW);
 }
 
-
 inline void setDir(bool dir) {
   digitalWrite(PIN_DIR, dir);
 }
 
-/* -------------------------------------------------------------------------
-   STEPPING CHANGE ONLY:
-   - Replaced delayMicroseconds-based stepOnce() with a hardware-timer driven
-     pulse generator (IntervalTimer) that times the HIGH pulse and LOW gap.
-   - Everything else in your code is unchanged.
-
-   Timer tick = 1us. ISR advances a tiny 3-state pulse machine:
-     IDLE -> HIGH pulse -> LOW gap -> IDLE
----------------------------------------------------------------------------*/
 IntervalTimer stepTimer;
 
-static volatile uint8_t  stepState = 0;     // 0=IDLE, 1=HIGH, 2=LOW_GAP
+static volatile uint8_t  stepState = 0;
 static volatile uint16_t highUsReq = 0;
 static volatile uint16_t lowUsReq  = 0;
 static volatile uint16_t ticksLeft = 0;
@@ -138,7 +75,6 @@ void stepperISR() {
   }
 
   if (stepState == 1) {
-    // End HIGH pulse -> STEP LOW, start LOW gap
     digitalWriteFast(PIN_PUL, LOW);
     stepState = 2;
     ticksLeft = (lowUsReq > 0) ? (uint16_t)(lowUsReq - 1) : 0;
@@ -146,15 +82,12 @@ void stepperISR() {
   }
 
   if (stepState == 2) {
-    // End LOW gap -> done
     stepState = 0;
     return;
   }
 }
 
-// Single step pulse
 inline void stepOnce(uint16_t pulseHighUs, uint16_t stepDelayUs) {
-  // Request a pulse (HIGH then LOW) timed by the ISR
   noInterrupts();
   highUsReq = pulseHighUs;
   lowUsReq  = stepDelayUs;
@@ -163,33 +96,23 @@ inline void stepOnce(uint16_t pulseHighUs, uint16_t stepDelayUs) {
   digitalWriteFast(PIN_PUL, HIGH);
   interrupts();
 
-  // Wait only for THIS step to complete (your existing motion loops stay the same)
   while (stepState != 0) {
-    // no delay; ISR is doing the timing
   }
 }
 
-// Emergency stop + notify Arduino
 [[noreturn]] void faultOverrun(const char* reason) {
-  // Stop outputs / disable motor
   setHomeReady(false);
 
-  // Pulse alarm to Arduino for 1 second
   digitalWrite(PIN_OVERRUN_ALARM, HIGH);
   delay(OVERRUN_ALARM_PULSE_MS);
   digitalWrite(PIN_OVERRUN_ALARM, LOW);
 
-  // If you want serial debugging, uncomment:
-  // Serial.println(reason);
-
   state = State::FAULT;
   while (true) {
-    // Hard halt. Power cycle to reset, or add a reset input if desired.
     delay(100);
   }
 }
 
-// Move N steps in a direction, watching OVERRUN the whole time
 void moveStepsWithOverrunWatch(bool dir, int steps, uint16_t pulseUs, uint16_t delayUs) {
   setDir(dir);
   for (int i = 0; i < steps; i++) {
@@ -198,13 +121,10 @@ void moveStepsWithOverrunWatch(bool dir, int steps, uint16_t pulseUs, uint16_t d
   }
 }
 
-// Homing routine described in your message
 void doHoming() {
   setHomeReady(false);
 
-  // --- CASE A: On power-up, HOME is LOW (we are on/near the home sensor) ---
   if (isHomeActive()) {
-    // Move CCW until HOME goes HIGH (leave the sensor)
     setDir(DIR_CCW);
     int steps = 0;
     while (isHomeActive()) {
@@ -213,7 +133,6 @@ void doHoming() {
       stepOnce(STEP_PULSE_US_FAST, STEP_DELAY_US_FAST);
     }
 
-    // Now creep CW slowly until HOME becomes LOW again (re-enter home precisely)
     setDir(DIR_CW);
     steps = 0;
     while (!isHomeActive()) {
@@ -222,9 +141,7 @@ void doHoming() {
       stepOnce(STEP_PULSE_US_SLOW, STEP_DELAY_US_SLOW);
     }
 
-  }
-  // --- CASE B: On power-up, HOME is HIGH (not at home) ---
-  else {
+  } else {
 
     setDir(DIR_CW);
     int steps = 0;
@@ -236,92 +153,66 @@ void doHoming() {
 
   }
 
-  // --- Overrun sensor sanity check (move CW 128, verify overrun not triggered, return) ---
-  // NOTE: You wrote "it should give a LOW signal" after moving CW 128.
-  // Most setups expect "overrun NOT triggered" here. This code enforces that: overrun must be INACTIVE.
   moveStepsWithOverrunWatch(DIR_CW, STEPS_EXTRA_SEARCH, STEP_PULSE_US_FAST, STEP_DELAY_US_FAST);
 
   if (isOverrunActive()) {
-    // If your wiring truly expects LOW here, flip OVERRUN_ACTIVE_LOW or change this check.
     faultOverrun("Overrun sensor active during sanity check (expected inactive)");
   }
 
-  // Go back to HOME by moving CCW 128 steps.
   moveStepsWithOverrunWatch(DIR_CCW, STEPS_EXTRA_SEARCH, STEP_PULSE_US_FAST, STEP_DELAY_US_FAST);
 
-
   if (!isHomeActive()) {
-    // Not necessarily "overrun", but it's a hard fault in practice
     faultOverrun("Failed to return to HOME after sanity check");
   }
 
-  // Ready for production
   setHomeReady(true);
 }
 
-// Do one injection cycle: CCW 480 (inject) then CW back to HOME (max 480+128)
 void doInjectCycle() {
   setHomeReady(false);
 
-  // Inject: from HOME go CCW 480 steps
   moveStepsWithOverrunWatch(DIR_CCW, STEPS_INJECT, STEP_PULSE_US_FAST, STEP_DELAY_US_FAST);
 
-  // Return: go CW until HOME found, but do NOT exceed 480+128 steps.
   setDir(DIR_CW);
   const int maxReturnSteps = STEPS_INJECT + STEPS_EXTRA_SEARCH;
   for (int i = 0; i < maxReturnSteps; i++) {
     if (isOverrunActive()) faultOverrun("OVERRUN during return-to-home");
     if (isHomeActive()) {
-      // Back at home
       setHomeReady(true);
       return;
     }
     stepOnce(STEP_PULSE_US_FAST, STEP_DELAY_US_FAST);
   }
 
-  // If we got here: we moved 480+128 CW and never saw HOME -> missed both sensors region
   faultOverrun("Missed HOME on return (exceeded 480+128 steps)");
 }
 
 void setup() {
-  // Optional debugging:
-  // Serial.begin(115200);
   delay(1000);
   pinMode(PIN_PUL, OUTPUT);
   pinMode(PIN_DIR, OUTPUT);
   pinMode(PIN_ENA, OUTPUT);
 
-  // Sensors: default to pullups (common for mechanical switches / NPN sensors with open collector)
   pinMode(PIN_HOME_SENSOR, INPUT_PULLDOWN);
   pinMode(PIN_OVERRUN_SENSOR, INPUT_PULLDOWN);
 
+  pinMode(PIN_INJECT_CMD, INPUT_PULLUP);
 
-  // Arduino command input:
-  // If Arduino drives a strong HIGH/LOW, plain INPUT is fine.
-  // If you need a default LOW, you can use INPUT_PULLDOWN on many Teensy boards.
-  //pinMode(PIN_INJECT_CMD, INPUT);
-    pinMode(PIN_INJECT_CMD, INPUT_PULLUP);
-
-  // Outputs to Arduino
   pinMode(PIN_HOME_READY, OUTPUT);
   pinMode(PIN_OVERRUN_ALARM, OUTPUT);
+
   digitalWrite(PIN_ENA, HIGH);
   digitalWrite(PIN_OVERRUN_ALARM, LOW);
   setHomeReady(false);
 
-  // Motor initial
   digitalWrite(PIN_PUL, LOW);
   setDir(DIR_CW);
 
-  // Start the 1us stepping timer (stepping change only)
   stepTimer.begin(stepperISR, 1);
 
-  // Start homing immediately
   state = State::BOOT_HOMING;
 }
 
-
-//
 // constexpr uint16_t STEP_PULSE_US = 5;
 // constexpr uint16_t STEP_DELAY_US = 1500;
 // constexpr bool DIR_A = HIGH;
@@ -333,14 +224,13 @@ void setup() {
 //   delayMicroseconds(STEP_DELAY_US);
 // }
 
-// // ---- MOVE N STEPS ----
 // void moveSteps(bool dir, int steps) {
 //   digitalWrite(PIN_DIR, dir);
 //   for (int i = 0; i < steps; i++) {
 //     stepOnce();
 //   }
 // }
-//
+
 void loop() {
   switch (state) {
     case State::BOOT_HOMING: {
@@ -351,33 +241,25 @@ void loop() {
     }
 
     case State::READY_IDLE: {
-      // In production, continuously verify overrun isn't hit
       if (isOverrunActive()) faultOverrun("OVERRUN during READY_IDLE");
 
-      // Keep HOME_READY asserted when we are truly home
-      // (If you want it strictly from logic, you can also do: setHomeReady(isHomeActive()); )
       setHomeReady(true);
 
-      // Rising-edge detect on INJECT_CMD
       bool injectCmd = digitalRead(PIN_INJECT_CMD) == HIGH;
-      // LEVEL-TRIGGERED:
-      // If pin10 is HIGH and we are at HOME, inject again
       if (injectCmd && isHomeActive()) {
-      delay(150);               // small pause so we don't instantly re-trigger
-      state = State::INJECTING;
+        delay(150);
+        state = State::INJECTING;
       }
       break;
     }
 
     case State::INJECTING: {
       doInjectCycle();
-      // After cycle, we should be home and HOME_READY already set HIGH by doInjectCycle()
       state = State::READY_IDLE;
       break;
     }
 
     case State::RETURNING:
-      // Not used (kept for future expansion)
       state = State::READY_IDLE;
       break;
 
@@ -387,21 +269,15 @@ void loop() {
       break;
   }
 
-
-///test code
   // bool homeActive = (digitalRead(PIN_HOME_SENSOR) == HIGH);
 
   // if (homeActive) {
-  //   // Move one way 20 steps
   //   moveSteps(DIR_A, 20);
   //   delay(500);
-
-  //   // Move back 20 steps
   //   moveSteps(DIR_B, 20);
   //   delay(500);
   // }
   // else {
-  //   // Do absolutely nothing
   //   delay(50);
   // }
 }
