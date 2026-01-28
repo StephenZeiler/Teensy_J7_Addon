@@ -300,8 +300,8 @@ void setup() {
   pinMode(PIN_ENA, OUTPUT);
 
   // Sensors: default to pullups (common for mechanical switches / NPN sensors with open collector)
-  pinMode(PIN_HOME_SENSOR, INPUT);
-  pinMode(PIN_OVERRUN_SENSOR, INPUT);
+  pinMode(PIN_HOME_SENSOR, INPUT_PULLDOWN);
+  pinMode(PIN_OVERRUN_SENSOR, INPUT_PULLDOWN);
 
 
   // Arduino command input:
