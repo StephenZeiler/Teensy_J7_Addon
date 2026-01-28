@@ -12,8 +12,8 @@ constexpr uint8_t PIN_INJECT_CMD    = 10;
 constexpr uint8_t PIN_HOME_READY    = 11;
 constexpr uint8_t PIN_OVERRUN_ALARM = 12;
 
-constexpr bool DIR_CW  = HIGH;
-constexpr bool DIR_CCW = LOW;
+constexpr bool DIR_CW  = LOW;
+constexpr bool DIR_CCW = HIGH;
 
 constexpr int STEPS_INJECT       = 480;
 constexpr int STEPS_EXTRA_SEARCH = 128;
