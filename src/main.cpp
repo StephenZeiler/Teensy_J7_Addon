@@ -294,7 +294,7 @@ void setup() {
   
   // Configure communication pins
   pinMode(HOME_NOTIFICATION, OUTPUT);
-  pinMode(INJECT_COMMAND, INPUT);
+  pinMode(INJECT_COMMAND, INPUT_PULLUP);
   pinMode(OVERRUN_ALARM, OUTPUT);
   
   // Initialize outputs to LOW
