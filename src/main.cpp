@@ -35,7 +35,7 @@ const int OVERRUN_ALARM = 12;      // Output to Arduino
 // Motor parameters
 const int STEP_DELAY = 500;        // Microseconds between steps (adjust for speed)
 const int SLOW_STEP_DELAY = 1000;  // Slower speed for precise homing
-const int INJECT_STEPS = 480;      // Steps to inject one bulb
+const int INJECT_STEPS = 346;      // Steps to inject one bulb
 const int OVERRUN_CHECK_STEPS = 128; // Steps to verify overrun sensor
 const int SAFETY_MARGIN_STEPS = 128; // Additional steps before declaring error
 
