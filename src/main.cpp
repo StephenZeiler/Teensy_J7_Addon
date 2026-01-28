@@ -52,7 +52,7 @@ inline bool isOverrunActive() {
 }
 
 inline void setHomeReady(bool ready) {
-  digitalWrite(PIN_HOME_READY, ready ? HIGH : LOW);
+  digitalWrite(PIN_HOME_READY, ready ? LOW : HIGH);
 }
 
 inline void setDir(bool dir) {
