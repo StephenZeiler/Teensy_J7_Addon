@@ -26,8 +26,8 @@ constexpr uint16_t STEP_DELAY_US_SLOW  = 900;
 constexpr bool HOME_ACTIVE_LOW    = false;
 constexpr bool OVERRUN_ACTIVE_LOW = false;
 
-constexpr int HOMING_MAX_STEPS_CW  = 4000000;
-constexpr int HOMING_MAX_STEPS_CCW = 4000000;
+constexpr int HOMING_MAX_STEPS_CW  = 4000;
+constexpr int HOMING_MAX_STEPS_CCW = 4000;
 
 constexpr uint16_t OVERRUN_ALARM_PULSE_MS = 1000;
 
@@ -193,8 +193,8 @@ void setup() {
   pinMode(PIN_DIR, OUTPUT);
   pinMode(PIN_ENA, OUTPUT);
 
-  pinMode(PIN_HOME_SENSOR, INPUT_PULLDOWN);
-  pinMode(PIN_OVERRUN_SENSOR, INPUT_PULLDOWN);
+  pinMode(PIN_HOME_SENSOR, INPUT);
+  pinMode(PIN_OVERRUN_SENSOR, INPUT);
 
   pinMode(PIN_INJECT_CMD, INPUT_PULLUP);
 
@@ -213,71 +213,71 @@ void setup() {
   state = State::BOOT_HOMING;
 }
 
-// constexpr uint16_t STEP_PULSE_US = 5;
-// constexpr uint16_t STEP_DELAY_US = 1500;
-// constexpr bool DIR_A = HIGH;
-// constexpr bool DIR_B = LOW;
-// void stepOnce() {
-//   digitalWrite(PIN_PUL, HIGH);
-//   delayMicroseconds(STEP_PULSE_US);
-//   digitalWrite(PIN_PUL, LOW);
-//   delayMicroseconds(STEP_DELAY_US);
-// }
+constexpr uint16_t STEP_PULSE_US = 5;
+constexpr uint16_t STEP_DELAY_US = 1500;
+constexpr bool DIR_A = HIGH;
+constexpr bool DIR_B = LOW;
+void stepOnce() {
+  digitalWrite(PIN_PUL, HIGH);
+  delayMicroseconds(STEP_PULSE_US);
+  digitalWrite(PIN_PUL, LOW);
+  delayMicroseconds(STEP_DELAY_US);
+}
 
-// void moveSteps(bool dir, int steps) {
-//   digitalWrite(PIN_DIR, dir);
-//   for (int i = 0; i < steps; i++) {
-//     stepOnce();
-//   }
-// }
+void moveSteps(bool dir, int steps) {
+  digitalWrite(PIN_DIR, dir);
+  for (int i = 0; i < steps; i++) {
+    stepOnce();
+  }
+}
 
 void loop() {
-  switch (state) {
-    case State::BOOT_HOMING: {
-      if (isOverrunActive()) faultOverrun("OVERRUN active at boot");
-      doHoming();
-      state = State::READY_IDLE;
-      break;
-    }
+  // switch (state) {
+  //   case State::BOOT_HOMING: {
+  //     if (isOverrunActive()) faultOverrun("OVERRUN active at boot");
+  //     doHoming();
+  //     state = State::READY_IDLE;
+  //     break;
+  //   }
 
-    case State::READY_IDLE: {
-      if (isOverrunActive()) faultOverrun("OVERRUN during READY_IDLE");
+  //   case State::READY_IDLE: {
+  //     if (isOverrunActive()) faultOverrun("OVERRUN during READY_IDLE");
 
-      setHomeReady(true);
+  //     setHomeReady(true);
 
-      bool injectCmd = digitalRead(PIN_INJECT_CMD) == HIGH;
-      if (injectCmd && isHomeActive()) {
-        delay(150);
-        state = State::INJECTING;
-      }
-      break;
-    }
+  //     bool injectCmd = digitalRead(PIN_INJECT_CMD) == HIGH;
+  //     if (injectCmd && isHomeActive()) {
+  //       delay(150);
+  //       state = State::INJECTING;
+  //     }
+  //     break;
+  //   }
 
-    case State::INJECTING: {
-      doInjectCycle();
-      state = State::READY_IDLE;
-      break;
-    }
+  //   case State::INJECTING: {
+  //     doInjectCycle();
+  //     state = State::READY_IDLE;
+  //     break;
+  //   }
 
-    case State::RETURNING:
-      state = State::READY_IDLE;
-      break;
+  //   case State::RETURNING:
+  //     state = State::READY_IDLE;
+  //     break;
 
-    case State::FAULT:
-    default:
-      setHomeReady(false);
-      break;
+  //   case State::FAULT:
+  //   default:
+  //     setHomeReady(false);
+  //     break;
+  // }
+
+  bool homeActive = (digitalRead(PIN_HOME_SENSOR) == HIGH);
+
+  if (homeActive) {
+    moveSteps(DIR_A, 20);
+    delay(500);
+    moveSteps(DIR_B, 20);
+    delay(500);
   }
-
-  // bool homeActive = (digitalRead(PIN_HOME_SENSOR) == HIGH);
-
-  // if (homeActive) {
-  //   moveSteps(DIR_A, 20);
-  //   delay(500);
-  //   moveSteps(DIR_B, 20);
-  //   delay(500);
-  // }
-  // else {
-  //   delay(50);
-  // }
+  else {
+    delay(50);
+  }
 }
