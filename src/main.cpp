@@ -201,7 +201,7 @@ void setup() {
   pinMode(PIN_HOME_READY, OUTPUT);
   pinMode(PIN_OVERRUN_ALARM, OUTPUT);
 
-  digitalWrite(PIN_ENA, HIGH);
+  digitalWrite(PIN_ENA, LOW);
   digitalWrite(PIN_OVERRUN_ALARM, LOW);
   setHomeReady(false);
 
