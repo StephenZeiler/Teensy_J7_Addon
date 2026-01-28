@@ -77,7 +77,7 @@ static const uint16_t STEP_DELAY_US_SLOW = 1400;  // slow creep for edge finding
 static const uint16_t SENSOR_STABLE_MS = 5;
 
 // ----------------------- Helpers -----------------------
-enum Dir : uint8_t { DIR_CW = 1, DIR_CCW = 0 }; // You may need to flip these to match your mechanism
+enum Dir : uint8_t { DIR_CW = 0, DIR_CCW = 1 };
 
 static inline void driverEnable(bool enabled)
 {
