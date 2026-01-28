@@ -22,10 +22,10 @@
  * 
  * Arduino Communication:
  *   HOME_NOTIFICATION = 11 (Teensy -> Arduino: Ram is home and ready)
- *   INJECT_COMMAND = 10 (Arduino -> Teensy: Inject one bulb) [NOT USED IN NEW LOGIC]
+ *   INJECT_COMMAND = 10 (Arduino -> Teensy: Ram go down, wait for LOW to return)
  *   OVERRUN_ALARM = 12 (Teensy -> Arduino: Error/alarm signal)
  *   TROLL_HOME_COMMAND = 24 (Arduino -> Teensy: Move wheel to home)
- *   MOVE_WHEEL_COMMAND = 25 (Arduino -> Teensy: Move wheel one slot)
+ *   MOVE_WHEEL_COMMAND = 25 (Arduino -> Teensy: Pulse to move wheel one slot)
  *   WHEEL_READY_NOTIFICATION = 26 (Teensy -> Arduino: Wheel is ready)
  *   WHEEL_POSITION_ALARM = 27 (Teensy -> Arduino: Wheel position sensor error)
  */
@@ -55,10 +55,10 @@ const int WHEEL_POSITION_SENSOR = 31;
 // ARDUINO COMMUNICATION PINS
 // =====================
 const int HOME_NOTIFICATION = 11;        // Output to Arduino: Ram home
-const int INJECT_COMMAND = 10;           // Input from Arduino (not used in new logic)
+const int INJECT_COMMAND = 10;           // Input from Arduino: Ram inject (stays down while HIGH)
 const int OVERRUN_ALARM = 12;            // Output to Arduino: Error
 const int TROLL_HOME_COMMAND = 24;       // Input from Arduino: Troll wheel to home
-const int MOVE_WHEEL_COMMAND = 25;       // Input from Arduino: Move wheel one slot
+const int MOVE_WHEEL_COMMAND = 25;       // Input from Arduino: Pulse to move wheel one slot
 const int WHEEL_READY_NOTIFICATION = 26; // Output to Arduino: Wheel ready
 const int WHEEL_POSITION_ALARM = 27;     // Output to Arduino: Wheel position error
 
@@ -272,12 +272,6 @@ void performRamHomingSequence() {
 void performInjectionCycle() {
   Serial.println("Starting injection cycle...");
   
-  // Check sensors before starting
-  Serial.print("Pre-injection check - Home sensor: ");
-  Serial.print(digitalRead(HOME_SENSOR) ? "HIGH" : "LOW");
-  Serial.print(", Overrun sensor: ");
-  Serial.println(digitalRead(OVERRUN_SENSOR) ? "HIGH" : "LOW");
-  
   // Move clockwise to inject bulb
   Serial.print("Injecting: Moving CLOCKWISE ");
   Serial.print(INJECT_STEPS);
@@ -285,22 +279,18 @@ void performInjectionCycle() {
   
   setDirection(CLOCKWISE);
   for (int i = 0; i < INJECT_STEPS; i++) {
-    // Check for overrun during injection
-    if (digitalRead(OVERRUN_SENSOR) == HIGH) {
-      Serial.print("ERROR: Overrun sensor triggered during INJECTION at step ");
-      Serial.println(i);
-      triggerOverrunAlarm();
-      readyForProduction = false;
-      return;
-    }
     stepMotor(STEP_DELAY);
   }
   
-  Serial.println("Injection complete - returning to home");
-  Serial.print("After injection - Home sensor: ");
-  Serial.print(digitalRead(HOME_SENSOR) ? "HIGH" : "LOW");
-  Serial.print(", Overrun sensor: ");
-  Serial.println(digitalRead(OVERRUN_SENSOR) ? "HIGH" : "LOW");
+  Serial.println("Injection position reached - ram is DOWN");
+  Serial.println("Waiting for inject command (pin 10) to go LOW before returning...");
+  
+  // Wait for inject command to go LOW
+  while (digitalRead(INJECT_COMMAND) == HIGH) {
+    delay(10); // Small delay while waiting
+  }
+  
+  Serial.println("Inject command is now LOW - returning to home");
   
   // Return counter-clockwise to home
   Serial.print("Returning: Moving COUNTER-CLOCKWISE ");
@@ -314,8 +304,7 @@ void performInjectionCycle() {
   for (int i = 0; i < INJECT_STEPS; i++) {
     // Check for overrun during return
     if (digitalRead(OVERRUN_SENSOR) == HIGH) {
-      Serial.print("ERROR: Overrun sensor triggered during RETURN at step ");
-      Serial.println(i);
+      Serial.println("ERROR: Overrun sensor triggered during return!");
       triggerOverrunAlarm();
       readyForProduction = false;
       return;
@@ -325,8 +314,7 @@ void performInjectionCycle() {
     
     // Check if we reached home
     if (digitalRead(HOME_SENSOR) == HIGH && !reachedHome) {
-      Serial.print("Home sensor detected during return at step ");
-      Serial.println(i);
+      Serial.println("Home sensor detected during return");
       reachedHome = true;
     }
   }
@@ -363,10 +351,6 @@ void performInjectionCycle() {
   }
   
   Serial.println("Successfully returned to home");
-  Serial.print("Final position - Home sensor: ");
-  Serial.print(digitalRead(HOME_SENSOR) ? "HIGH" : "LOW");
-  Serial.print(", Overrun sensor: ");
-  Serial.println(digitalRead(OVERRUN_SENSOR) ? "HIGH" : "LOW");
   Serial.println("Ready for next cycle\n");
   
   // Signal Arduino that ram is ready again
@@ -415,23 +399,17 @@ void moveWheelOneSlot() {
   
   Serial.println("Wheel movement complete");
   
-  // Check wheel position sensor (bypass in TEST_MODE since Arduino isn't connected)
-  if (TEST_MODE) {
-    Serial.println("TEST_MODE: Skipping wheel position sensor check");
+  // Check wheel position sensor
+  Serial.println("Checking wheel position sensor (pin 31)...");
+  if (digitalRead(WHEEL_POSITION_SENSOR) == LOW) {
+    Serial.println("Wheel position sensor: CORRECT (LOW)");
     Serial.println("Wheel is ready for injection\n");
+    
+    // Signal Arduino that wheel is ready
     digitalWrite(WHEEL_READY_NOTIFICATION, HIGH);
   } else {
-    Serial.println("Checking wheel position sensor...");
-    if (digitalRead(WHEEL_POSITION_SENSOR) == LOW) {
-      Serial.println("Wheel position sensor: CORRECT (LOW)");
-      Serial.println("Wheel is ready for injection\n");
-      
-      // Signal Arduino that wheel is ready
-      digitalWrite(WHEEL_READY_NOTIFICATION, HIGH);
-    } else {
-      Serial.println("ERROR: Wheel position sensor still HIGH!");
-      triggerWheelPositionAlarm();
-    }
+    Serial.println("ERROR: Wheel position sensor still HIGH!");
+    triggerWheelPositionAlarm();
   }
 }
 
@@ -463,7 +441,7 @@ void setup() {
   
   // Configure communication pins
   pinMode(HOME_NOTIFICATION, OUTPUT);
-  pinMode(INJECT_COMMAND, INPUT_PULLUP);
+  pinMode(INJECT_COMMAND, INPUT);
   pinMode(OVERRUN_ALARM, OUTPUT);
   pinMode(TROLL_HOME_COMMAND, INPUT);
   pinMode(MOVE_WHEEL_COMMAND, INPUT);
@@ -479,28 +457,27 @@ void setup() {
   digitalWrite(WHEEL_ENABLE_PIN, HIGH); // Disable wheel motor initially
   
   Serial.println("Hardware initialized");
+  Serial.println("Waiting for homing command (pin 24) from Arduino...\n");
+}
+
+// =====================
+// MAIN LOOP
+// =====================
+void loop() {
+  // Check for troll home command from Arduino
+  int trollHomeSignal = digitalRead(TROLL_HOME_COMMAND);
   
-  if (TEST_MODE) {
-    Serial.println("\n*** TEST MODE ENABLED ***");
-    Serial.println("Will auto-home and cycle continuously\n");
-    Serial.println("Beginning automatic homing sequence...\n");
+  // Detect rising edge of troll home command
+  if (trollHomeSignal == HIGH && lastTrollHomeCommand == LOW) {
+    Serial.println("\n>>> TROLL HOME COMMAND RECEIVED (pin 24) <<<");
+    digitalWrite(HOME_NOTIFICATION, LOW);
+    digitalWrite(WHEEL_READY_NOTIFICATION, LOW);
     
-    // In test mode, automatically perform homing without Arduino
-    // Simulate wheel homing (move slowly for a bit, then assume home)
-    Serial.println("--- TEST MODE: WHEEL HOMING ---");
-    Serial.println("Moving wheel slowly to simulate homing...");
-    digitalWrite(WHEEL_ENABLE_PIN, LOW);
-    digitalWrite(WHEEL_DIR_PIN, LOW);
+    // Start both homing sequences
+    // Wheel will troll until Arduino sensor detects home
+    trollWheelToHome();
     
-    // Move wheel slowly for 100 steps to simulate finding home
-    for (int i = 0; i < 100; i++) {
-      stepWheelMotor(WHEEL_TROLL_SPEED);
-    }
-    
-    Serial.println("Wheel homing complete (simulated)");
-    wheelIsHomed = true;
-    
-    // Perform ram homing
+    // Ram will find its home
     performRamHomingSequence();
     
     // Both are now homed
@@ -510,80 +487,39 @@ void setup() {
       Serial.println("=================================\n");
       readyForProduction = true;
     }
-  } else {
-    Serial.println("Waiting for homing commands from Arduino...\n");
-  }
-}
-
-// =====================
-// MAIN LOOP
-// =====================
-void loop() {
-  // Only check for Arduino homing command if NOT in test mode
-  if (!TEST_MODE) {
-    // Check for troll home command from Arduino
-    int trollHomeSignal = digitalRead(TROLL_HOME_COMMAND);
-    
-    // Detect rising edge of troll home command
-    if (trollHomeSignal == HIGH && lastTrollHomeCommand == LOW) {
-      Serial.println("\n>>> TROLL HOME COMMAND RECEIVED <<<");
-      digitalWrite(HOME_NOTIFICATION, LOW);
-      digitalWrite(WHEEL_READY_NOTIFICATION, LOW);
-      
-      // Start both homing sequences
-      // Wheel will troll until Arduino sensor detects home
-      trollWheelToHome();
-      
-      // Ram will find its home
-      performRamHomingSequence();
-      
-      // Both are now homed
-      if (ramIsHomed && wheelIsHomed) {
-        Serial.println("\n=================================");
-        Serial.println("BOTH MOTORS HOMED - READY FOR PRODUCTION");
-        Serial.println("=================================\n");
-        readyForProduction = true;
-      }
-    }
-    
-    lastTrollHomeCommand = trollHomeSignal;
   }
   
-  // Check for move wheel command from Arduino (only if ready for production)
+  lastTrollHomeCommand = trollHomeSignal;
+  
+  // Check for move wheel command (only if ready for production)
   if (readyForProduction) {
-    if (TEST_MODE) {
-      // Auto-move wheel and inject continuously with 2 second delay between cycles
-      Serial.println("\n>>> TEST MODE: AUTO MOVE WHEEL AND INJECT <<<");
-      digitalWrite(HOME_NOTIFICATION, LOW);
+    int moveWheelSignal = digitalRead(MOVE_WHEEL_COMMAND);
+    
+    // Detect rising edge of move wheel command (short pulse on pin 25)
+    if (moveWheelSignal == HIGH && lastMoveWheelCommand == LOW) {
+      Serial.println("\n>>> MOVE WHEEL COMMAND RECEIVED (pin 25) <<<");
       digitalWrite(WHEEL_READY_NOTIFICATION, LOW);
       
       // Move wheel one slot
       moveWheelOneSlot();
-      
-      // Perform injection cycle
-      performInjectionCycle();
-      
-      delay(2000); // Wait 2 seconds before next cycle
-      
-    } else {
-      // Normal Arduino command detection
-      int moveWheelSignal = digitalRead(MOVE_WHEEL_COMMAND);
-      
-      // Detect rising edge of move wheel command
-      if (moveWheelSignal == HIGH && lastMoveWheelCommand == LOW) {
-        Serial.println("\n>>> MOVE WHEEL COMMAND RECEIVED <<<");
-        digitalWrite(HOME_NOTIFICATION, LOW);
-        digitalWrite(WHEEL_READY_NOTIFICATION, LOW);
-        
-        // Move wheel one slot
-        moveWheelOneSlot();
-        
-        // After wheel is ready, perform injection cycle
-        performInjectionCycle();
-      }
-      
-      lastMoveWheelCommand = moveWheelSignal;
+      // Wheel ready signal (pin 26) is set inside moveWheelOneSlot if position is correct
     }
+    
+    lastMoveWheelCommand = moveWheelSignal;
+    
+    // Check for inject command
+    int injectSignal = digitalRead(INJECT_COMMAND);
+    
+    // Detect rising edge of inject command (pin 10)
+    if (injectSignal == HIGH && lastInjectCommand == LOW) {
+      Serial.println("\n>>> INJECT COMMAND RECEIVED (pin 10) <<<");
+      digitalWrite(HOME_NOTIFICATION, LOW);
+      
+      // Perform injection cycle (will wait for pin 10 to go LOW before returning)
+      performInjectionCycle();
+    }
+    
+    lastInjectCommand = injectSignal;
   }
   
   delay(10); // Small delay to prevent excessive polling
