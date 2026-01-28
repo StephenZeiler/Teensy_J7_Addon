@@ -273,9 +273,9 @@ void loop() {
 
   if (homeActive) {
     moveSteps(DIR_A, 20);
-    delay(500);
+    delay(100);
     moveSteps(DIR_B, 20);
-    delay(500);
+    delay(100);
   }
   else {
     delay(50);
