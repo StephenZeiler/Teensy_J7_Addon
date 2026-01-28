@@ -402,7 +402,7 @@ void loop() {
 ///test code
   //bool homeActive = (digitalRead(PIN_HOME_SENSOR) == HIGH);
 bool homeActive = true;
-  if (homeActive) {
+  if (true) {
     // Move one way 20 steps
     moveSteps(DIR_A, 20);
     delay(500);
