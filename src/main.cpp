@@ -12,8 +12,8 @@ constexpr uint8_t PIN_INJECT_CMD    = 10;
 constexpr uint8_t PIN_HOME_READY    = 11;
 constexpr uint8_t PIN_OVERRUN_ALARM = 12;
 
-constexpr bool DIR_CW  = LOW;
-constexpr bool DIR_CCW = HIGH;
+constexpr bool DIR_CW  = HIGH;
+constexpr bool DIR_CCW = LOW;
 
 constexpr int STEPS_INJECT       = 480;
 constexpr int STEPS_EXTRA_SEARCH = 128;
@@ -23,8 +23,8 @@ constexpr uint16_t STEP_DELAY_US_FAST  = 300;
 constexpr uint16_t STEP_PULSE_US_SLOW  = 6;
 constexpr uint16_t STEP_DELAY_US_SLOW  = 900;
 
-constexpr bool HOME_ACTIVE_HIGH    = false;
-constexpr bool OVERRUN_ACTIVE_HIGH = false;
+constexpr bool HOME_ACTIVE_HIGH    = true;
+constexpr bool OVERRUN_ACTIVE_HIGH = true;
 
 constexpr int HOMING_MAX_STEPS_CW  = 4000;
 constexpr int HOMING_MAX_STEPS_CCW = 4000;
@@ -52,7 +52,7 @@ inline bool isOverrunActive() {
 }
 
 inline void setHomeReady(bool ready) {
-  digitalWrite(PIN_HOME_READY, ready ? LOW : HIGH);
+  digitalWrite(PIN_HOME_READY, ready ? HIGH : LOW);
 }
 
 inline void setDir(bool dir) {
@@ -193,8 +193,8 @@ void setup() {
   pinMode(PIN_DIR, OUTPUT);
   pinMode(PIN_ENA, OUTPUT);
 
-  pinMode(PIN_HOME_SENSOR, INPUT_PULLDOWN);
-  pinMode(PIN_OVERRUN_SENSOR, INPUT_PULLDOWN);
+  pinMode(PIN_HOME_SENSOR, INPUT);
+  pinMode(PIN_OVERRUN_SENSOR, INPUT);
 
   pinMode(PIN_INJECT_CMD, INPUT_PULLUP);
 
