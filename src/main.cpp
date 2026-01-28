@@ -23,8 +23,8 @@ constexpr uint16_t STEP_DELAY_US_FAST  = 300;
 constexpr uint16_t STEP_PULSE_US_SLOW  = 6;
 constexpr uint16_t STEP_DELAY_US_SLOW  = 900;
 
-constexpr bool HOME_ACTIVE_LOW    = false;
-constexpr bool OVERRUN_ACTIVE_LOW = false;
+constexpr bool HOME_ACTIVE_HIGH    = false;
+constexpr bool OVERRUN_ACTIVE_HIGH = false;
 
 constexpr int HOMING_MAX_STEPS_CW  = 4000;
 constexpr int HOMING_MAX_STEPS_CCW = 4000;
@@ -43,12 +43,12 @@ State state = State::BOOT_HOMING;
 
 inline bool isHomeActive() {
   bool v = digitalRead(PIN_HOME_SENSOR);
-  return HOME_ACTIVE_LOW ? (v == LOW) : (v == HIGH);
+  return HOME_ACTIVE_HIGH ? (v == HIGH) : (v == LOW);
 }
 
 inline bool isOverrunActive() {
   bool v = digitalRead(PIN_OVERRUN_SENSOR);
-  return OVERRUN_ACTIVE_LOW ? (v == LOW) : (v == HIGH);
+  return OVERRUN_ACTIVE_HIGH ? (v == HIGH) : (v == LOW);
 }
 
 inline void setHomeReady(bool ready) {
