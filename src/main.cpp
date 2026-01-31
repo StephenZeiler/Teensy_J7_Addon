@@ -1,35 +1,35 @@
 #include <Arduino.h>
 #include <math.h>
+
 /*
  * Bulb Ram + Wheel Motor Controller - Teensy Code
- * 
  * UPDATED FOR 1600 STEPS/REV (doubled from 800)
- * 
+ *
  * PIN LAYOUT:
- * 
+ *
  * RAM Motor Driver:
- *   DIR = 3  (Direction control)
- *   PUL = 2  (Pulse/Step control)
- *   ENA = 4  (Enable)
- * 
+ *   DIR = 3
+ *   PUL = 2
+ *   ENA = 4
+ *
  * Wheel Motor Driver:
- *   DIR = 6  (Direction control)
- *   STEP = 5 (Pulse/Step control)
- *   ENA = 7  (Enable)
- * 
+ *   DIR  = 6
+ *   STEP = 5
+ *   ENA  = 7
+ *
  * Sensors:
- *   HOME_SENSOR = 32 (Detects ram home position)
- *   OVERRUN_SENSOR = 30 (Detects ram overrun/limit)
- *   WHEEL_POSITION_SENSOR = 31 (Detects correct wheel position - LOW when correct)
- * 
+ *   HOME_SENSOR          = 32 (HIGH when active)
+ *   OVERRUN_SENSOR       = 30 (HIGH when active)
+ *   WHEEL_POSITION_SENSOR= 31 (LOW when correct)
+ *
  * Arduino Communication:
- *   HOME_NOTIFICATION = 11 (Teensy -> Arduino: Ram is home and ready)
- *   INJECT_COMMAND = 10 (Arduino -> Teensy: Ram go down, wait for LOW to return)
- *   OVERRUN_ALARM = 12 (Teensy -> Arduino: Error/alarm signal)
- *   TROLL_HOME_COMMAND = 24 (Arduino -> Teensy: Move wheel to home)
- *   MOVE_WHEEL_COMMAND = 25 (Arduino -> Teensy: Pulse to move wheel one slot)
- *   WHEEL_READY_NOTIFICATION = 26 (Teensy -> Arduino: Wheel is ready)
- *   WHEEL_POSITION_ALARM = 27 (Teensy -> Arduino: Wheel position sensor error)
+ *   HOME_NOTIFICATION    = 11 (Teensy -> Arduino)
+ *   INJECT_COMMAND       = 10 (Arduino -> Teensy)
+ *   OVERRUN_ALARM        = 12 (Teensy -> Arduino)
+ *   TROLL_HOME_COMMAND   = 24 (Arduino -> Teensy)
+ *   MOVE_WHEEL_COMMAND   = 25 (Arduino -> Teensy)
+ *   WHEEL_READY_NOTIFICATION = 26 (Teensy -> Arduino)
+ *   WHEEL_POSITION_ALARM = 27 (Teensy -> Arduino)
  */
 
 // =====================
@@ -42,54 +42,55 @@ const int ENA_PIN = 4;
 // =====================
 // WHEEL MOTOR PINS
 // =====================
-const int WHEEL_STEP_PIN = 5;
-const int WHEEL_DIR_PIN = 6;
+const int WHEEL_STEP_PIN   = 5;
+const int WHEEL_DIR_PIN    = 6;
 const int WHEEL_ENABLE_PIN = 7;
 
 // =====================
 // SENSOR PINS
 // =====================
-const int HOME_SENSOR = 32;
-const int OVERRUN_SENSOR = 30;
+const int HOME_SENSOR           = 32;
+const int OVERRUN_SENSOR        = 30;
 const int WHEEL_POSITION_SENSOR = 31;
 
 // =====================
 // ARDUINO COMMUNICATION PINS
 // =====================
-const int HOME_NOTIFICATION = 11;        // Output to Arduino: Ram home
-const int INJECT_COMMAND = 10;           // Input from Arduino: Ram inject (stays down while HIGH)
-const int OVERRUN_ALARM = 12;            // Output to Arduino: Error
-const int TROLL_HOME_COMMAND = 24;       // Input from Arduino: Troll wheel to home
-const int MOVE_WHEEL_COMMAND = 25;       // Input from Arduino: Pulse to move wheel one slot
-const int WHEEL_READY_NOTIFICATION = 26; // Output to Arduino: Wheel ready
-const int WHEEL_POSITION_ALARM = 27;     // Output to Arduino: Wheel position error
+const int HOME_NOTIFICATION       = 11; // Output to Arduino: Ram home
+const int INJECT_COMMAND          = 10; // Input from Arduino: Ram inject (stays down while HIGH)
+const int OVERRUN_ALARM           = 12; // Output to Arduino: Error/alarm
+const int TROLL_HOME_COMMAND      = 24; // Input from Arduino: Troll wheel to home
+const int MOVE_WHEEL_COMMAND      = 25; // Input from Arduino: Pulse to move wheel one slot
+const int WHEEL_READY_NOTIFICATION= 26; // Output to Arduino: Wheel ready
+const int WHEEL_POSITION_ALARM    = 27; // Output to Arduino: Wheel position error
 
 // =====================
 // RAM MOTOR PARAMETERS (doubled for 1600 steps/rev)
 // =====================
-const int STEP_DELAY = 82;         // Microseconds between steps (123 * 0.67 = 82, 50% faster)
-const int SLOW_STEP_DELAY = 165;   // Slower speed for precise homing (247 * 0.67 = 165, 50% faster)
-const int INJECT_STEPS = 692;      // Steps to inject one bulb (346 * 2)
-const int OVERRUN_CHECK_STEPS = 256; // Steps to verify overrun sensor (128 * 2)
-const int SAFETY_MARGIN_STEPS = 256; // Additional steps before declaring error (128 * 2)
+const int STEP_DELAY          = 70;   // production speed (15% faster)
+const int HOME_STEP_DELAY     = 105;  // homing fast (15% faster)
+const int SLOW_STEP_DELAY     = 140;  // homing creep (15% faster)
+const int INJECT_STEPS        = 692;  // (346 * 2)
+const int OVERRUN_CHECK_STEPS = 256;  // (128 * 2)
+const int SAFETY_MARGIN_STEPS = 256;  // (128 * 2)
 
 // =====================
 // WHEEL MOTOR PARAMETERS (doubled for 1600 steps/rev)
 // =====================
-const int WHEEL_STEPS_PER_SLOT = 400;  // Steps to move one wheel slot (200 * 2)
-const int WHEEL_TROLL_SPEED = 2000;    // Microseconds between steps when trolling home (slower)
+const int WHEEL_STEPS_PER_SLOT = 400;  // (200 * 2)
+const int WHEEL_TROLL_SPEED    = 1000; // homing speed (already 50% faster)
 
-// Acceleration/deceleration parameters for main movement (one slot)
-const int MIN_STEP_DELAY = 140;   // Fastest step delay in microseconds (167 * 0.84 = 140)
-const int MAX_STEP_DELAY = 1126;  // Slowest step delay in microseconds (1340 * 0.84 = 1126)
-const int ACCEL_STEPS = 92;       // Number of steps to accelerate (46 * 2)
-const int DECEL_STEPS = 92;       // Number of steps to decelerate (46 * 2)
+// 15% faster wheel motion (accel + cruise + decel)
+const int MIN_STEP_DELAY = 119;  // was 140
+const int MAX_STEP_DELAY = 957;  // was 1126
+const int ACCEL_STEPS    = 92;   // (46 * 2)
+const int DECEL_STEPS    = 92;   // (46 * 2)
 
-// Test mode - set to true for automatic continuous injection, false for normal Arduino control
+// Test mode
 const bool TEST_MODE = false;
 
 // Direction definitions
-const bool CLOCKWISE = LOW;
+const bool CLOCKWISE         = LOW;
 const bool COUNTER_CLOCKWISE = HIGH;
 
 // =====================
@@ -98,16 +99,17 @@ const bool COUNTER_CLOCKWISE = HIGH;
 bool ramIsHomed = false;
 bool wheelIsHomed = false;
 bool readyForProduction = false;
-int lastInjectCommand = LOW;
-int lastTrollHomeCommand = LOW;
-int lastMoveWheelCommand = LOW;
+
+int lastInjectCommand     = LOW;
+int lastTrollHomeCommand  = LOW;
+int lastMoveWheelCommand  = LOW;
 
 // =====================
-// RAM MOTOR FUNCTIONS
+// RAM MOTOR LOW-LEVEL
 // =====================
 void setDirection(bool dir) {
   digitalWrite(DIR_PIN, dir);
-  delayMicroseconds(5); // Small delay for direction change
+  delayMicroseconds(5);
 }
 
 void stepMotor(int delayTime) {
@@ -117,219 +119,311 @@ void stepMotor(int delayTime) {
   delayMicroseconds(delayTime);
 }
 
+// Active-HIGH sensors (as you stated)
+inline bool isHomeActive()    { return (digitalRead(HOME_SENSOR) == HIGH); }
+inline bool isOverrunActive() { return (digitalRead(OVERRUN_SENSOR) == HIGH); }
+
+// =====================
+// ALARMS
+// =====================
 void triggerOverrunAlarm() {
   Serial.println("\n!!! OVERRUN ALARM TRIGGERED !!!");
   Serial.println("Sending alarm signal to Arduino...");
-  
+
   digitalWrite(HOME_NOTIFICATION, LOW);
   digitalWrite(WHEEL_READY_NOTIFICATION, LOW);
+
   digitalWrite(OVERRUN_ALARM, HIGH);
   delay(1000);
   digitalWrite(OVERRUN_ALARM, LOW);
-  
+
   Serial.println("Machine stopped - manual intervention required");
   Serial.println("Please reset the system after correcting the issue\n");
-  
-  // Halt execution
-  while(1) {
-    delay(1000);
-  }
+
+  while (1) { delay(1000); }
 }
 
 void triggerWheelPositionAlarm() {
   Serial.println("\n!!! WHEEL POSITION ALARM TRIGGERED !!!");
   Serial.println("Wheel position sensor did not detect correct position!");
   Serial.println("Sending alarm signal to Arduino...");
-  
+
   digitalWrite(HOME_NOTIFICATION, LOW);
   digitalWrite(WHEEL_READY_NOTIFICATION, LOW);
+
   digitalWrite(WHEEL_POSITION_ALARM, HIGH);
   delay(1000);
   digitalWrite(WHEEL_POSITION_ALARM, LOW);
-  
+
   Serial.println("Machine stopped - manual intervention required");
   Serial.println("Please reset the system after correcting the issue\n");
-  
-  // Halt execution
-  while(1) {
-    delay(1000);
-  }
+
+  while (1) { delay(1000); }
 }
 
-void performRamHomingSequence() {
-  Serial.println("--- RAM HOMING SEQUENCE START ---");
-  
-  // Check initial home sensor state
-  bool homeState = digitalRead(HOME_SENSOR);
-  
-  if (homeState == HIGH) {
-    Serial.println("Home sensor is HIGH - ram near home position");
-    Serial.println("Moving CLOCKWISE until home sensor goes LOW...");
-    
-    // Move clockwise until home sensor goes LOW
-    setDirection(CLOCKWISE);
-    while (digitalRead(HOME_SENSOR) == HIGH) {
-      if (digitalRead(OVERRUN_SENSOR) == HIGH) {
-        Serial.println("ERROR: Hit overrun sensor while clearing home!");
-        triggerOverrunAlarm();
-        return;
-      }
-      stepMotor(STEP_DELAY);
-    }
-    
-    Serial.println("Home sensor is now LOW");
-    Serial.println("Moving COUNTER-CLOCKWISE slowly back to home...");
-    
-    // Slowly move counter-clockwise back to home
-    setDirection(COUNTER_CLOCKWISE);
-    while (digitalRead(HOME_SENSOR) == LOW) {
-      if (digitalRead(OVERRUN_SENSOR) == HIGH) {
-        Serial.println("ERROR: Hit overrun sensor while returning to home!");
-        triggerOverrunAlarm();
-        return;
-      }
-      stepMotor(SLOW_STEP_DELAY);
-    }
-    
-    Serial.println("Home sensor is HIGH - at home position");
-    
-  } else {
-    Serial.println("Home sensor is LOW - ram away from home");
-    Serial.println("Moving COUNTER-CLOCKWISE to find home...");
-    
-    // Move counter-clockwise until home sensor goes HIGH
-    setDirection(COUNTER_CLOCKWISE);
-    int stepCount = 0;
-    while (digitalRead(HOME_SENSOR) == LOW) {
-      if (digitalRead(OVERRUN_SENSOR) == HIGH) {
-        Serial.println("ERROR: Hit overrun sensor before finding home!");
-        triggerOverrunAlarm();
-        return;
-      }
-      stepMotor(STEP_DELAY);
-      stepCount++;
-      
-      // Safety check - prevent infinite loop (doubled for 1600 steps/rev)
-      if (stepCount > 4000) {
-        Serial.println("ERROR: Home sensor never found!");
-        triggerOverrunAlarm();
-        return;
-      }
-    }
-    
-    Serial.println("Home sensor is HIGH - at home position");
+// =====================
+// HOMING HELPERS (EDGE-BASED HOME)
+// =====================
+bool stepWithOverrunCheck(int delayTime) {
+  if (isOverrunActive()) {
+    Serial.println("ERROR: Overrun sensor triggered!");
+    triggerOverrunAlarm();
+    return false;
   }
-  
-  // Now verify overrun sensor is working
-  Serial.println("\nVerifying overrun sensor...");
+  stepMotor(delayTime);
+  return true;
+}
+
+bool moveUntil(bool (*condition)(), int delayTime, long maxSteps, const char* failMsg) {
+  long steps = 0;
+  while (!condition()) {
+    if (!stepWithOverrunCheck(delayTime)) return false;
+    steps++;
+    if (steps >= maxSteps) {
+      Serial.println(failMsg);
+      triggerOverrunAlarm();
+      return false;
+    }
+  }
+  return true;
+}
+
+bool moveUntilNot(bool (*condition)(), int delayTime, long maxSteps, const char* failMsg) {
+  long steps = 0;
+  while (condition()) {
+    if (!stepWithOverrunCheck(delayTime)) return false;
+    steps++;
+    if (steps >= maxSteps) {
+      Serial.println(failMsg);
+      triggerOverrunAlarm();
+      return false;
+    }
+  }
+  return true;
+}
+
+// Clear HOME zone CW, then creep CCW until HOME becomes active (repeatable edge)
+bool homeByClearingAndCreepingIn(long maxClearSteps, long maxCreepSteps) {
+  Serial.println("Edge-homing: clearing HOME zone CLOCKWISE...");
+  setDirection(CLOCKWISE);
+
+  // was STEP_DELAY -> now HOME_STEP_DELAY
+  if (!moveUntilNot(isHomeActive, HOME_STEP_DELAY, maxClearSteps,
+                    "ERROR: Could not clear HOME zone (CW) within max steps!")) {
+    return false;
+  }
+
+  Serial.println("Edge-homing: creeping back into HOME zone COUNTER-CLOCKWISE...");
+  setDirection(COUNTER_CLOCKWISE);
+
+  // keep creep slow
+  if (!moveUntil(isHomeActive, SLOW_STEP_DELAY, maxCreepSteps,
+                 "ERROR: Could not re-enter HOME zone (CCW) within max steps!")) {
+    return false;
+  }
+
+  Serial.println("HOME edge captured (repeatable).");
+  return true;
+}
+// Escape OVERRUN by moving CLOCKWISE until OVERRUN clears.
+// We intentionally DO NOT treat OVERRUN=HIGH as a fault during this escape.
+bool escapeOverrunClockwise(long maxSteps) {
+  Serial.println("Escaping OVERRUN: moving CLOCKWISE until OVERRUN clears...");
+  setDirection(CLOCKWISE);
+
+  long steps = 0;
+  while (isOverrunActive()) {
+    stepMotor(HOME_STEP_DELAY);   // <-- no overrun check here on purpose
+    steps++;
+    if (steps >= maxSteps) {
+      Serial.println("ERROR: OVERRUN did not clear while moving CW (stuck sensor or wrong direction)!");
+      triggerOverrunAlarm();
+      return false;
+    }
+  }
+
+  Serial.println("OVERRUN cleared.");
+  return true;
+}
+
+// =====================
+// UPDATED RAM HOMING SEQUENCE
+// =====================
+void performRamHomingSequence() {
+  Serial.println("--- RAM HOMING SEQUENCE START (EDGE-BASED) ---");
+
+  // Tune these if your travel range is bigger/smaller
+  const long MAX_SEARCH_STEPS = 12000;
+  const long MAX_CLEAR_STEPS  = 6000;
+  const long MAX_CREEP_STEPS  = 6000;
+  const long MAX_CW_TO_HOME   = 12000;
+
+  bool home0 = isHomeActive();
+  bool over0 = isOverrunActive();
+
+  Serial.print("Initial sensors: HOME=");
+  Serial.print(home0 ? "HIGH" : "LOW");
+  Serial.print(" OVERRUN=");
+  Serial.println(over0 ? "HIGH" : "LOW");
+
+  // CASE A: Already on OVERRUN at start
+  if (over0) {
+  Serial.println("Start condition: OVERRUN active.");
+
+  // 1) Escape OVERRUN first (CW), ignoring OVERRUN=HIGH during this escape
+  if (!escapeOverrunClockwise(4000)) return;   // tune max if needed
+
+  // 2) Now OVERRUN is cleared, continue CW until HOME is found
+  Serial.println("Moving CLOCKWISE to find HOME...");
+  setDirection(CLOCKWISE);
+
+  // IMPORTANT: now that OVERRUN is cleared, it's safe to use the normal guarded move
+  if (!moveUntil(isHomeActive, STEP_DELAY, MAX_CW_TO_HOME,
+                 "ERROR: HOME never found while moving CW from OVERRUN!")) {
+    return;
+  }
+
+  Serial.println("HOME zone found while moving CW.");
+
+  // 3) Continue CW until HOME clears, then creep CCW until HOME active again (repeatable edge)
+  if (!homeByClearingAndCreepingIn(MAX_CLEAR_STEPS, MAX_CREEP_STEPS)) return;
+}
+  // CASE B: HOME active at start (wide zone) -> must clear then creep back
+  else if (home0) {
+    Serial.println("Start condition: HOME active (wide zone). Clearing then creeping back...");
+    if (!homeByClearingAndCreepingIn(MAX_CLEAR_STEPS, MAX_CREEP_STEPS)) return;
+  }
+  // CASE C: Neither active -> unknown position
+  else {
+    Serial.println("Start condition: Neither HOME nor OVERRUN active. Searching CCW for HOME or OVERRUN...");
+
+    setDirection(COUNTER_CLOCKWISE);
+    long steps = 0;
+    while (!isHomeActive() && !isOverrunActive()) {
+      stepMotor(STEP_DELAY);
+      steps++;
+      if (steps >= MAX_SEARCH_STEPS) {
+        Serial.println("ERROR: Neither HOME nor OVERRUN found during search!");
+        triggerOverrunAlarm();
+        return;
+      }
+    }
+
+    if (isOverrunActive()) {
+      Serial.println("OVERRUN found during search. Moving CW to HOME then edge-homing...");
+
+      setDirection(CLOCKWISE);
+      if (!moveUntil(isHomeActive, STEP_DELAY, MAX_CW_TO_HOME,
+                     "ERROR: HOME never found while moving CW from OVERRUN!")) {
+        return;
+      }
+
+      if (!homeByClearingAndCreepingIn(MAX_CLEAR_STEPS, MAX_CREEP_STEPS)) return;
+    } else {
+      Serial.println("HOME found during search. Edge-homing (clear CW, creep CCW)...");
+      if (!homeByClearingAndCreepingIn(MAX_CLEAR_STEPS, MAX_CREEP_STEPS)) return;
+    }
+  }
+
+  // =====================
+  // Verify OVERRUN sensor works (move CCW into it, then return CW)
+  // =====================
+  Serial.println("\nVerifying OVERRUN sensor...");
   Serial.print("Moving COUNTER-CLOCKWISE ");
   Serial.print(OVERRUN_CHECK_STEPS);
-  Serial.println(" steps to check overrun sensor");
-  
+  Serial.println(" steps to check OVERRUN");
+
   setDirection(COUNTER_CLOCKWISE);
   for (int i = 0; i < OVERRUN_CHECK_STEPS; i++) {
     stepMotor(STEP_DELAY);
   }
-  
-  // Check if overrun sensor is triggered
-  if (digitalRead(OVERRUN_SENSOR) != HIGH) {
-    Serial.println("ERROR: Overrun sensor did NOT trigger!");
-    Serial.println("Overrun sensor may be faulty or disconnected");
+
+  if (!isOverrunActive()) {
+    Serial.println("ERROR: Overrun sensor did NOT trigger during verification!");
     triggerOverrunAlarm();
     return;
   }
-  
-  Serial.println("Overrun sensor verified - reading HIGH");
+  Serial.println("OVERRUN verified - reading HIGH");
+
   Serial.print("Returning CLOCKWISE ");
   Serial.print(OVERRUN_CHECK_STEPS);
-  Serial.println(" steps to home");
-  
-  // Return to home
+  Serial.println(" steps back toward HOME...");
+
   setDirection(CLOCKWISE);
   for (int i = 0; i < OVERRUN_CHECK_STEPS; i++) {
     stepMotor(STEP_DELAY);
   }
-  
-  // Verify we're back at home
-  if (digitalRead(HOME_SENSOR) != HIGH) {
-    Serial.println("WARNING: Not at home sensor after return");
-    // Fine tune position
-    while (digitalRead(HOME_SENSOR) == LOW) {
-      stepMotor(SLOW_STEP_DELAY);
-    }
-  }
-  
+
+  // Re-capture the HOME edge so "home" is identical every time
+  Serial.println("Re-capturing HOME edge after OVERRUN verification...");
+  if (!homeByClearingAndCreepingIn(MAX_CLEAR_STEPS, MAX_CREEP_STEPS)) return;
+
   Serial.println("\n=================================");
-  Serial.println("RAM HOMING COMPLETE");
+  Serial.println("RAM HOMING COMPLETE (EDGE-BASED)");
   Serial.println("=================================\n");
-  
+
   ramIsHomed = true;
-  
-  // Signal Arduino that ram is home
   digitalWrite(HOME_NOTIFICATION, HIGH);
 }
 
+// =====================
+// INJECTION CYCLE
+// =====================
 void performInjectionCycle() {
   unsigned long injectionStartTime = millis();
-  
+
+  // Inject down
   setDirection(CLOCKWISE);
   for (int i = 0; i < INJECT_STEPS; i++) {
     stepMotor(STEP_DELAY);
   }
-  
+
+  // Wait for Arduino to drop command LOW
   while (digitalRead(INJECT_COMMAND) == HIGH) {
     delay(10);
   }
-  
+
+  // Return up
   setDirection(COUNTER_CLOCKWISE);
   bool reachedHome = false;
-  
+
   for (int i = 0; i < INJECT_STEPS; i++) {
-    if (digitalRead(OVERRUN_SENSOR) == HIGH) {
+    if (isOverrunActive()) {
       Serial.println("ERROR: Overrun sensor triggered!");
       triggerOverrunAlarm();
       readyForProduction = false;
       return;
     }
-    
     stepMotor(STEP_DELAY);
-    
-    if (digitalRead(HOME_SENSOR) == HIGH && !reachedHome) {
-      reachedHome = true;
-    }
+    if (isHomeActive() && !reachedHome) reachedHome = true;
   }
-  
-  if (digitalRead(HOME_SENSOR) != HIGH) {
+
+  // Safety margin search for home
+  if (!isHomeActive()) {
     for (int i = 0; i < SAFETY_MARGIN_STEPS; i++) {
-      if (digitalRead(HOME_SENSOR) == HIGH) {
-        reachedHome = true;
-        break;
-      }
-      
-      if (digitalRead(OVERRUN_SENSOR) == HIGH) {
+      if (isHomeActive()) { reachedHome = true; break; }
+      if (isOverrunActive()) {
         Serial.println("ERROR: Hit overrun!");
         triggerOverrunAlarm();
         readyForProduction = false;
         return;
       }
-      
       stepMotor(STEP_DELAY);
     }
-    
-    if (digitalRead(HOME_SENSOR) != HIGH) {
+
+    if (!isHomeActive()) {
       Serial.println("ERROR: Missed home!");
       triggerOverrunAlarm();
       readyForProduction = false;
       return;
     }
   }
-  
+
   unsigned long totalCycleTime = millis() - injectionStartTime;
-  
   Serial.print("Ram: ");
   Serial.print(totalCycleTime);
   Serial.println("ms");
-  
+
   digitalWrite(HOME_NOTIFICATION, HIGH);
 }
 
@@ -346,32 +440,31 @@ void stepWheelMotor(int delayTime) {
 void trollWheelToHome() {
   Serial.println("--- WHEEL TROLLING TO HOME ---");
   Serial.println("Moving wheel slowly until Arduino sensor detects home...");
-  
-  digitalWrite(WHEEL_DIR_PIN, LOW);    // Set direction
-  
-  // Move slowly while Arduino signal is HIGH
+
+  digitalWrite(WHEEL_DIR_PIN, LOW);
+
   while (digitalRead(TROLL_HOME_COMMAND) == HIGH) {
     stepWheelMotor(WHEEL_TROLL_SPEED);
   }
-  
+
   Serial.println("Arduino home sensor detected - wheel is home");
   wheelIsHomed = true;
 }
 
 void moveWheelOneSlot() {
   unsigned long wheelStartTime = millis();
-  
+
   digitalWrite(WHEEL_DIR_PIN, LOW);
-  
+
   unsigned long lastStepTime = 0;
   unsigned long currentTime;
   bool stepHigh = false;
   int stepsTaken = 0;
-  
+
   while (stepsTaken < WHEEL_STEPS_PER_SLOT) {
     currentTime = micros();
     unsigned long stepDelay;
-    
+
     if (stepsTaken < ACCEL_STEPS) {
       float progress = (float)stepsTaken / ACCEL_STEPS;
       stepDelay = MAX_STEP_DELAY * pow((float)MIN_STEP_DELAY / MAX_STEP_DELAY, progress);
@@ -382,9 +475,9 @@ void moveWheelOneSlot() {
       float progress = (float)stepsIntoDecel / DECEL_STEPS;
       stepDelay = MIN_STEP_DELAY * pow((float)MAX_STEP_DELAY / MIN_STEP_DELAY, progress);
     }
-    
+
     stepDelay = constrain(stepDelay, MIN_STEP_DELAY, MAX_STEP_DELAY);
-    
+
     if (currentTime - lastStepTime >= stepDelay) {
       if (!stepHigh) {
         digitalWrite(WHEEL_STEP_PIN, HIGH);
@@ -397,15 +490,12 @@ void moveWheelOneSlot() {
       lastStepTime = currentTime;
     }
   }
-  
+
   unsigned long wheelDuration = millis() - wheelStartTime;
-  
   Serial.print("Wheel: ");
   Serial.print(wheelDuration);
   Serial.println("ms");
-  
-  //delay(100);
-  
+
   if (digitalRead(WHEEL_POSITION_SENSOR) == LOW) {
     digitalWrite(WHEEL_READY_NOTIFICATION, HIGH);
   } else {
@@ -420,26 +510,26 @@ void moveWheelOneSlot() {
 void setup() {
   Serial.begin(115200);
   delay(1000);
-  
+
   Serial.println("=================================");
   Serial.println("Bulb Ram + Wheel Controller Starting...");
   Serial.println("=================================");
-  
+
   // Configure ram motor pins
   pinMode(DIR_PIN, OUTPUT);
   pinMode(PUL_PIN, OUTPUT);
   pinMode(ENA_PIN, OUTPUT);
-  
+
   // Configure wheel motor pins
   pinMode(WHEEL_STEP_PIN, OUTPUT);
   pinMode(WHEEL_DIR_PIN, OUTPUT);
   pinMode(WHEEL_ENABLE_PIN, OUTPUT);
-  
+
   // Configure sensor pins
   pinMode(HOME_SENSOR, INPUT);
   pinMode(OVERRUN_SENSOR, INPUT);
   pinMode(WHEEL_POSITION_SENSOR, INPUT);
-  
+
   // Configure communication pins
   pinMode(HOME_NOTIFICATION, OUTPUT);
   pinMode(INJECT_COMMAND, INPUT);
@@ -448,17 +538,17 @@ void setup() {
   pinMode(MOVE_WHEEL_COMMAND, INPUT);
   pinMode(WHEEL_READY_NOTIFICATION, OUTPUT);
   pinMode(WHEEL_POSITION_ALARM, OUTPUT);
-  
+
   // Initialize outputs to LOW
   digitalWrite(HOME_NOTIFICATION, LOW);
   digitalWrite(OVERRUN_ALARM, LOW);
   digitalWrite(WHEEL_READY_NOTIFICATION, LOW);
   digitalWrite(WHEEL_POSITION_ALARM, LOW);
-  
-  // Enable both motor drivers and keep them on
-  digitalWrite(ENA_PIN, LOW);          // Enable ram motor (active low)
-  digitalWrite(WHEEL_ENABLE_PIN, LOW); // Enable wheel motor (active low)
-  
+
+  // Enable motor drivers (active low)
+  digitalWrite(ENA_PIN, LOW);
+  digitalWrite(WHEEL_ENABLE_PIN, LOW);
+
   Serial.println("Hardware initialized");
   Serial.println("Motor drivers enabled");
   Serial.println("Waiting for homing command (pin 24) from Arduino...\n");
@@ -470,26 +560,27 @@ void setup() {
 void loop() {
   // Check for troll home command from Arduino
   int trollHomeSignal = digitalRead(TROLL_HOME_COMMAND);
-  
-  // Detect rising edge of troll home command
+
+  // Rising edge of troll home command
   if (trollHomeSignal == HIGH && lastTrollHomeCommand == LOW) {
     Serial.println("\n>>> TROLL HOME COMMAND RECEIVED (pin 24) <<<");
+
     digitalWrite(HOME_NOTIFICATION, LOW);
     digitalWrite(WHEEL_READY_NOTIFICATION, LOW);
-    
+
     // Start both homing sequences
     trollWheelToHome();
     performRamHomingSequence();
-    
+
     // Both are now homed
     if (ramIsHomed && wheelIsHomed) {
       Serial.println("\n=================================");
       Serial.println("BOTH MOTORS HOMED - READY FOR PRODUCTION");
       Serial.println("=================================\n");
+
       readyForProduction = true;
-      
       delay(100);
-      
+
       Serial.println("Checking wheel position after homing...");
       if (digitalRead(WHEEL_POSITION_SENSOR) == LOW) {
         Serial.println("Wheel position sensor: CORRECT (LOW)");
@@ -500,39 +591,32 @@ void loop() {
       }
     }
   }
-  
+
   lastTrollHomeCommand = trollHomeSignal;
-  
+
   // Check for move wheel command (only if ready for production)
   if (readyForProduction) {
     int moveWheelSignal = digitalRead(MOVE_WHEEL_COMMAND);
-    
-    // Detect rising edge of move wheel command (short pulse on pin 25)
+
+    // Rising edge of move wheel command
     if (moveWheelSignal == HIGH && lastMoveWheelCommand == LOW) {
       Serial.println("\n>>> MOVE WHEEL COMMAND RECEIVED (pin 25) <<<");
       digitalWrite(WHEEL_READY_NOTIFICATION, LOW);
-      
-      // Move wheel one slot
       moveWheelOneSlot();
-      // Wheel ready signal (pin 26) is set inside moveWheelOneSlot if position is correct
     }
-    
     lastMoveWheelCommand = moveWheelSignal;
-    
+
     // Check for inject command
     int injectSignal = digitalRead(INJECT_COMMAND);
-    
-    // Detect rising edge of inject command (pin 10)
+
+    // Rising edge of inject command
     if (injectSignal == HIGH && lastInjectCommand == LOW) {
       Serial.println("\n>>> INJECT COMMAND RECEIVED (pin 10) <<<");
       digitalWrite(HOME_NOTIFICATION, LOW);
-      
-      // Perform injection cycle (will wait for pin 10 to go LOW before returning)
       performInjectionCycle();
     }
-    
     lastInjectCommand = injectSignal;
   }
-  
-  delay(10); // Small delay to prevent excessive polling
+
+  delay(10);
 }
