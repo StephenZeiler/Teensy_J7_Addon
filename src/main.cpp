@@ -3,6 +3,8 @@
 /*
  * Bulb Ram + Wheel Motor Controller - Teensy Code
  * 
+ * UPDATED FOR 1600 STEPS/REV (doubled from 800)
+ * 
  * PIN LAYOUT:
  * 
  * RAM Motor Driver:
@@ -63,25 +65,25 @@ const int WHEEL_READY_NOTIFICATION = 26; // Output to Arduino: Wheel ready
 const int WHEEL_POSITION_ALARM = 27;     // Output to Arduino: Wheel position error
 
 // =====================
-// RAM MOTOR PARAMETERS
+// RAM MOTOR PARAMETERS (doubled for 1600 steps/rev)
 // =====================
 const int STEP_DELAY = 82;         // Microseconds between steps (123 * 0.67 = 82, 50% faster)
 const int SLOW_STEP_DELAY = 165;   // Slower speed for precise homing (247 * 0.67 = 165, 50% faster)
-const int INJECT_STEPS = 346;      // Steps to inject one bulb
-const int OVERRUN_CHECK_STEPS = 128; // Steps to verify overrun sensor
-const int SAFETY_MARGIN_STEPS = 128; // Additional steps before declaring error
+const int INJECT_STEPS = 692;      // Steps to inject one bulb (346 * 2)
+const int OVERRUN_CHECK_STEPS = 256; // Steps to verify overrun sensor (128 * 2)
+const int SAFETY_MARGIN_STEPS = 256; // Additional steps before declaring error (128 * 2)
 
 // =====================
-// WHEEL MOTOR PARAMETERS
+// WHEEL MOTOR PARAMETERS (doubled for 1600 steps/rev)
 // =====================
-const int WHEEL_STEPS_PER_SLOT = 200;  // Steps to move one wheel slot
+const int WHEEL_STEPS_PER_SLOT = 400;  // Steps to move one wheel slot (200 * 2)
 const int WHEEL_TROLL_SPEED = 2000;    // Microseconds between steps when trolling home (slower)
 
 // Acceleration/deceleration parameters for main movement (one slot)
 const int MIN_STEP_DELAY = 140;   // Fastest step delay in microseconds (167 * 0.84 = 140)
 const int MAX_STEP_DELAY = 1126;  // Slowest step delay in microseconds (1340 * 0.84 = 1126)
-const int ACCEL_STEPS = 46;       // Number of steps to accelerate
-const int DECEL_STEPS = 46;       // Number of steps to decelerate (increased for smoother stop)
+const int ACCEL_STEPS = 92;       // Number of steps to accelerate (46 * 2)
+const int DECEL_STEPS = 92;       // Number of steps to decelerate (46 * 2)
 
 // Test mode - set to true for automatic continuous injection, false for normal Arduino control
 const bool TEST_MODE = false;
@@ -207,8 +209,8 @@ void performRamHomingSequence() {
       stepMotor(STEP_DELAY);
       stepCount++;
       
-      // Safety check - prevent infinite loop
-      if (stepCount > 2000) {
+      // Safety check - prevent infinite loop (doubled for 1600 steps/rev)
+      if (stepCount > 4000) {
         Serial.println("ERROR: Home sensor never found!");
         triggerOverrunAlarm();
         return;
