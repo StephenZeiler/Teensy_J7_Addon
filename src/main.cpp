@@ -65,8 +65,8 @@ const int WHEEL_POSITION_ALARM = 27;     // Output to Arduino: Wheel position er
 // =====================
 // RAM MOTOR PARAMETERS
 // =====================
-const int STEP_DELAY = 500;        // Microseconds between steps (adjust for speed)
-const int SLOW_STEP_DELAY = 1000;  // Slower speed for precise homing
+const int STEP_DELAY = 82;         // Microseconds between steps (123 * 0.67 = 82, 50% faster)
+const int SLOW_STEP_DELAY = 165;   // Slower speed for precise homing (247 * 0.67 = 165, 50% faster)
 const int INJECT_STEPS = 346;      // Steps to inject one bulb
 const int OVERRUN_CHECK_STEPS = 128; // Steps to verify overrun sensor
 const int SAFETY_MARGIN_STEPS = 128; // Additional steps before declaring error
@@ -75,7 +75,13 @@ const int SAFETY_MARGIN_STEPS = 128; // Additional steps before declaring error
 // WHEEL MOTOR PARAMETERS
 // =====================
 const int WHEEL_STEPS_PER_SLOT = 200;  // Steps to move one wheel slot
-const int WHEEL_TROLL_SPEED = 1000;    // Microseconds between steps when trolling home
+const int WHEEL_TROLL_SPEED = 2000;    // Microseconds between steps when trolling home (slower)
+
+// Acceleration/deceleration parameters for main movement (one slot)
+const int MIN_STEP_DELAY = 140;   // Fastest step delay in microseconds (167 * 0.84 = 140)
+const int MAX_STEP_DELAY = 1126;  // Slowest step delay in microseconds (1340 * 0.84 = 1126)
+const int ACCEL_STEPS = 46;       // Number of steps to accelerate
+const int DECEL_STEPS = 46;       // Number of steps to decelerate (increased for smoother stop)
 
 // Test mode - set to true for automatic continuous injection, false for normal Arduino control
 const bool TEST_MODE = false;
@@ -122,10 +128,6 @@ void triggerOverrunAlarm() {
   Serial.println("Machine stopped - manual intervention required");
   Serial.println("Please reset the system after correcting the issue\n");
   
-  // Disable motors
-  digitalWrite(ENA_PIN, HIGH);
-  digitalWrite(WHEEL_ENABLE_PIN, HIGH);
-  
   // Halt execution
   while(1) {
     delay(1000);
@@ -145,10 +147,6 @@ void triggerWheelPositionAlarm() {
   
   Serial.println("Machine stopped - manual intervention required");
   Serial.println("Please reset the system after correcting the issue\n");
-  
-  // Disable motors
-  digitalWrite(ENA_PIN, HIGH);
-  digitalWrite(WHEEL_ENABLE_PIN, HIGH);
   
   // Halt execution
   while(1) {
@@ -270,41 +268,23 @@ void performRamHomingSequence() {
 }
 
 void performInjectionCycle() {
-  Serial.println("Starting injection cycle...");
-  
-  // Move clockwise to inject bulb
-  Serial.print("Injecting: Moving CLOCKWISE ");
-  Serial.print(INJECT_STEPS);
-  Serial.println(" steps");
+  unsigned long injectionStartTime = millis();
   
   setDirection(CLOCKWISE);
   for (int i = 0; i < INJECT_STEPS; i++) {
     stepMotor(STEP_DELAY);
   }
   
-  Serial.println("Injection position reached - ram is DOWN");
-  Serial.println("Waiting for inject command (pin 10) to go LOW before returning...");
-  
-  // Wait for inject command to go LOW
   while (digitalRead(INJECT_COMMAND) == HIGH) {
-    delay(10); // Small delay while waiting
+    delay(10);
   }
   
-  Serial.println("Inject command is now LOW - returning to home");
-  
-  // Return counter-clockwise to home
-  Serial.print("Returning: Moving COUNTER-CLOCKWISE ");
-  Serial.print(INJECT_STEPS);
-  Serial.println(" steps");
-  
   setDirection(COUNTER_CLOCKWISE);
-  int stepCount = 0;
   bool reachedHome = false;
   
   for (int i = 0; i < INJECT_STEPS; i++) {
-    // Check for overrun during return
     if (digitalRead(OVERRUN_SENSOR) == HIGH) {
-      Serial.println("ERROR: Overrun sensor triggered during return!");
+      Serial.println("ERROR: Overrun sensor triggered!");
       triggerOverrunAlarm();
       readyForProduction = false;
       return;
@@ -312,28 +292,20 @@ void performInjectionCycle() {
     
     stepMotor(STEP_DELAY);
     
-    // Check if we reached home
     if (digitalRead(HOME_SENSOR) == HIGH && !reachedHome) {
-      Serial.println("Home sensor detected during return");
       reachedHome = true;
     }
   }
   
-  // Verify we're at home
   if (digitalRead(HOME_SENSOR) != HIGH) {
-    Serial.println("WARNING: Not at home after return steps");
-    Serial.println("Attempting to find home...");
-    
-    // Try additional steps
     for (int i = 0; i < SAFETY_MARGIN_STEPS; i++) {
       if (digitalRead(HOME_SENSOR) == HIGH) {
-        Serial.println("Home found within safety margin");
         reachedHome = true;
         break;
       }
       
       if (digitalRead(OVERRUN_SENSOR) == HIGH) {
-        Serial.println("ERROR: Hit overrun, missed home sensor!");
+        Serial.println("ERROR: Hit overrun!");
         triggerOverrunAlarm();
         readyForProduction = false;
         return;
@@ -343,17 +315,19 @@ void performInjectionCycle() {
     }
     
     if (digitalRead(HOME_SENSOR) != HIGH) {
-      Serial.println("ERROR: Missed both home and overrun sensors!");
+      Serial.println("ERROR: Missed home!");
       triggerOverrunAlarm();
       readyForProduction = false;
       return;
     }
   }
   
-  Serial.println("Successfully returned to home");
-  Serial.println("Ready for next cycle\n");
+  unsigned long totalCycleTime = millis() - injectionStartTime;
   
-  // Signal Arduino that ram is ready again
+  Serial.print("Ram: ");
+  Serial.print(totalCycleTime);
+  Serial.println("ms");
+  
   digitalWrite(HOME_NOTIFICATION, HIGH);
 }
 
@@ -371,7 +345,6 @@ void trollWheelToHome() {
   Serial.println("--- WHEEL TROLLING TO HOME ---");
   Serial.println("Moving wheel slowly until Arduino sensor detects home...");
   
-  digitalWrite(WHEEL_ENABLE_PIN, LOW); // Enable wheel motor
   digitalWrite(WHEEL_DIR_PIN, LOW);    // Set direction
   
   // Move slowly while Arduino signal is HIGH
@@ -384,31 +357,57 @@ void trollWheelToHome() {
 }
 
 void moveWheelOneSlot() {
-  Serial.println("--- MOVING WHEEL ONE SLOT ---");
-  Serial.print("Moving ");
-  Serial.print(WHEEL_STEPS_PER_SLOT);
-  Serial.println(" steps");
+  unsigned long wheelStartTime = millis();
   
-  digitalWrite(WHEEL_ENABLE_PIN, LOW); // Enable wheel motor
-  digitalWrite(WHEEL_DIR_PIN, LOW);    // Set direction
+  digitalWrite(WHEEL_DIR_PIN, LOW);
   
-  // Move the wheel the specified number of steps
-  for (int i = 0; i < WHEEL_STEPS_PER_SLOT; i++) {
-    stepWheelMotor(WHEEL_TROLL_SPEED);
+  unsigned long lastStepTime = 0;
+  unsigned long currentTime;
+  bool stepHigh = false;
+  int stepsTaken = 0;
+  
+  while (stepsTaken < WHEEL_STEPS_PER_SLOT) {
+    currentTime = micros();
+    unsigned long stepDelay;
+    
+    if (stepsTaken < ACCEL_STEPS) {
+      float progress = (float)stepsTaken / ACCEL_STEPS;
+      stepDelay = MAX_STEP_DELAY * pow((float)MIN_STEP_DELAY / MAX_STEP_DELAY, progress);
+    } else if (stepsTaken < (WHEEL_STEPS_PER_SLOT - DECEL_STEPS)) {
+      stepDelay = MIN_STEP_DELAY;
+    } else {
+      int stepsIntoDecel = stepsTaken - (WHEEL_STEPS_PER_SLOT - DECEL_STEPS);
+      float progress = (float)stepsIntoDecel / DECEL_STEPS;
+      stepDelay = MIN_STEP_DELAY * pow((float)MAX_STEP_DELAY / MIN_STEP_DELAY, progress);
+    }
+    
+    stepDelay = constrain(stepDelay, MIN_STEP_DELAY, MAX_STEP_DELAY);
+    
+    if (currentTime - lastStepTime >= stepDelay) {
+      if (!stepHigh) {
+        digitalWrite(WHEEL_STEP_PIN, HIGH);
+        stepHigh = true;
+      } else {
+        digitalWrite(WHEEL_STEP_PIN, LOW);
+        stepHigh = false;
+        stepsTaken++;
+      }
+      lastStepTime = currentTime;
+    }
   }
   
-  Serial.println("Wheel movement complete");
+  unsigned long wheelDuration = millis() - wheelStartTime;
   
-  // Check wheel position sensor
-  Serial.println("Checking wheel position sensor (pin 31)...");
+  Serial.print("Wheel: ");
+  Serial.print(wheelDuration);
+  Serial.println("ms");
+  
+  //delay(100);
+  
   if (digitalRead(WHEEL_POSITION_SENSOR) == LOW) {
-    Serial.println("Wheel position sensor: CORRECT (LOW)");
-    Serial.println("Wheel is ready for injection\n");
-    
-    // Signal Arduino that wheel is ready
     digitalWrite(WHEEL_READY_NOTIFICATION, HIGH);
   } else {
-    Serial.println("ERROR: Wheel position sensor still HIGH!");
+    Serial.println("ERROR: Wheel position sensor HIGH!");
     triggerWheelPositionAlarm();
   }
 }
@@ -453,10 +452,13 @@ void setup() {
   digitalWrite(OVERRUN_ALARM, LOW);
   digitalWrite(WHEEL_READY_NOTIFICATION, LOW);
   digitalWrite(WHEEL_POSITION_ALARM, LOW);
-  digitalWrite(ENA_PIN, LOW); // Enable ram motor (active low for most drivers)
-  digitalWrite(WHEEL_ENABLE_PIN, HIGH); // Disable wheel motor initially
+  
+  // Enable both motor drivers and keep them on
+  digitalWrite(ENA_PIN, LOW);          // Enable ram motor (active low)
+  digitalWrite(WHEEL_ENABLE_PIN, LOW); // Enable wheel motor (active low)
   
   Serial.println("Hardware initialized");
+  Serial.println("Motor drivers enabled");
   Serial.println("Waiting for homing command (pin 24) from Arduino...\n");
 }
 
@@ -474,10 +476,7 @@ void loop() {
     digitalWrite(WHEEL_READY_NOTIFICATION, LOW);
     
     // Start both homing sequences
-    // Wheel will troll until Arduino sensor detects home
     trollWheelToHome();
-    
-    // Ram will find its home
     performRamHomingSequence();
     
     // Both are now homed
@@ -486,6 +485,17 @@ void loop() {
       Serial.println("BOTH MOTORS HOMED - READY FOR PRODUCTION");
       Serial.println("=================================\n");
       readyForProduction = true;
+      
+      delay(100);
+      
+      Serial.println("Checking wheel position after homing...");
+      if (digitalRead(WHEEL_POSITION_SENSOR) == LOW) {
+        Serial.println("Wheel position sensor: CORRECT (LOW)");
+        digitalWrite(WHEEL_READY_NOTIFICATION, HIGH);
+      } else {
+        Serial.println("ERROR: Wheel position sensor HIGH after homing!");
+        triggerWheelPositionAlarm();
+      }
     }
   }
   
