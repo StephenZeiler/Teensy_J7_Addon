@@ -532,10 +532,10 @@ void setup() {
 
   // Configure communication pins
   pinMode(HOME_NOTIFICATION, OUTPUT);
-  pinMode(INJECT_COMMAND, INPUT);
+  pinMode(INJECT_COMMAND, INPUT_PULLDOWN);  // Pull-down to prevent floating/noise
   pinMode(OVERRUN_ALARM, OUTPUT);
-  pinMode(TROLL_HOME_COMMAND, INPUT);
-  pinMode(MOVE_WHEEL_COMMAND, INPUT);
+  pinMode(TROLL_HOME_COMMAND, INPUT_PULLDOWN);  // Pull-down to prevent floating/noise
+  pinMode(MOVE_WHEEL_COMMAND, INPUT_PULLDOWN);  // Pull-down to prevent floating/noise
   pinMode(WHEEL_READY_NOTIFICATION, OUTPUT);
   pinMode(WHEEL_POSITION_ALARM, OUTPUT);
 
