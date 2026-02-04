@@ -104,11 +104,6 @@ int lastInjectCommand     = LOW;
 int lastTrollHomeCommand  = LOW;
 int lastMoveWheelCommand  = LOW;
 
-// Debouncing for MOVE_WHEEL_COMMAND
-const unsigned long MOVE_WHEEL_DEBOUNCE_MS = 5;  // 5 debounce
-unsigned long moveWheelHighStartTime = 0;
-bool moveWheelStable = false;
-
 // =====================
 // RAM MOTOR LOW-LEVEL
 // =====================
@@ -603,22 +598,11 @@ void loop() {
   if (readyForProduction) {
     int moveWheelSignal = digitalRead(MOVE_WHEEL_COMMAND);
 
-    // Debounce logic: signal must be stable HIGH for MOVE_WHEEL_DEBOUNCE_MS
-    if (moveWheelSignal == HIGH) {
-      if (lastMoveWheelCommand == LOW) {
-        // Rising edge detected - start debounce timer
-        moveWheelHighStartTime = millis();
-        moveWheelStable = false;
-      } else if (!moveWheelStable && (millis() - moveWheelHighStartTime >= MOVE_WHEEL_DEBOUNCE_MS)) {
-        // Signal has been HIGH long enough - execute command
-        moveWheelStable = true;
-        Serial.println("\n>>> MOVE WHEEL COMMAND RECEIVED (pin 25) <<<");
-        digitalWrite(WHEEL_READY_NOTIFICATION, LOW);
-        moveWheelOneSlot();
-      }
-    } else {
-      // Signal went LOW - reset debounce state
-      moveWheelStable = false;
+    // Rising edge of move wheel command
+    if (moveWheelSignal == HIGH && lastMoveWheelCommand == LOW) {
+      Serial.println("\n>>> MOVE WHEEL COMMAND RECEIVED (pin 25) <<<");
+      digitalWrite(WHEEL_READY_NOTIFICATION, LOW);
+      moveWheelOneSlot();
     }
     lastMoveWheelCommand = moveWheelSignal;
 
@@ -633,4 +617,6 @@ void loop() {
     }
     lastInjectCommand = injectSignal;
   }
+
+  delay(10);
 }
