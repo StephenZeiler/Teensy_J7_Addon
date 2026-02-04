@@ -105,7 +105,7 @@ int lastTrollHomeCommand  = LOW;
 int lastMoveWheelCommand  = LOW;
 
 // Debouncing for MOVE_WHEEL_COMMAND
-const unsigned long MOVE_WHEEL_DEBOUNCE_MS = 10;  // 10ms debounce
+const unsigned long MOVE_WHEEL_DEBOUNCE_MS = 5;  // 5 debounce
 unsigned long moveWheelHighStartTime = 0;
 bool moveWheelStable = false;
 
