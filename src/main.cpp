@@ -20,7 +20,6 @@
  * Sensors:
  *   HOME_SENSOR          = 32 (HIGH when active)
  *   OVERRUN_SENSOR       = 30 (HIGH when active)
- *   WHEEL_POSITION_SENSOR= 31 (LOW when correct)
  *
  * Arduino Communication:
  *   HOME_NOTIFICATION    = 11 (Teensy -> Arduino)
@@ -29,7 +28,6 @@
  *   TROLL_HOME_COMMAND   = 24 (Arduino -> Teensy)
  *   MOVE_WHEEL_COMMAND   = 25 (Arduino -> Teensy)
  *   WHEEL_READY_NOTIFICATION = 26 (Teensy -> Arduino)
- *   WHEEL_POSITION_ALARM = 27 (Teensy -> Arduino)
  */
 
 // =====================
@@ -51,7 +49,6 @@ const int WHEEL_ENABLE_PIN = 7;
 // =====================
 const int HOME_SENSOR           = 32;
 const int OVERRUN_SENSOR        = 30;
-const int WHEEL_POSITION_SENSOR = 31;
 
 // =====================
 // ARDUINO COMMUNICATION PINS
@@ -62,7 +59,6 @@ const int OVERRUN_ALARM           = 12; // Output to Arduino: Error/alarm
 const int TROLL_HOME_COMMAND      = 24; // Input from Arduino: Troll wheel to home
 const int MOVE_WHEEL_COMMAND      = 25; // Input from Arduino: Pulse to move wheel one slot
 const int WHEEL_READY_NOTIFICATION= 26; // Output to Arduino: Wheel ready
-const int WHEEL_POSITION_ALARM    = 27; // Output to Arduino: Wheel position error
 
 // =====================
 // RAM MOTOR PARAMETERS (doubled for 1600 steps/rev)
@@ -136,24 +132,6 @@ void triggerOverrunAlarm() {
   digitalWrite(OVERRUN_ALARM, HIGH);
   delay(1000);
   digitalWrite(OVERRUN_ALARM, LOW);
-
-  Serial.println("Machine stopped - manual intervention required");
-  Serial.println("Please reset the system after correcting the issue\n");
-
-  while (1) { delay(1000); }
-}
-
-void triggerWheelPositionAlarm() {
-  Serial.println("\n!!! WHEEL POSITION ALARM TRIGGERED !!!");
-  Serial.println("Wheel position sensor did not detect correct position!");
-  Serial.println("Sending alarm signal to Arduino...");
-
-  digitalWrite(HOME_NOTIFICATION, LOW);
-  digitalWrite(WHEEL_READY_NOTIFICATION, LOW);
-
-  digitalWrite(WHEEL_POSITION_ALARM, HIGH);
-  delay(1000);
-  digitalWrite(WHEEL_POSITION_ALARM, LOW);
 
   Serial.println("Machine stopped - manual intervention required");
   Serial.println("Please reset the system after correcting the issue\n");
@@ -496,13 +474,7 @@ void moveWheelOneSlot() {
   Serial.print(wheelDuration);
   Serial.println("ms");
 
-  delay(20); // Let wheel settle before checking position sensor
-  if (digitalRead(WHEEL_POSITION_SENSOR) == LOW) {
-    digitalWrite(WHEEL_READY_NOTIFICATION, HIGH);
-  } else {
-    Serial.println("ERROR: Wheel position sensor HIGH!");
-    triggerWheelPositionAlarm();
-  }
+  digitalWrite(WHEEL_READY_NOTIFICATION, HIGH);
 }
 
 // =====================
@@ -529,7 +501,6 @@ void setup() {
   // Configure sensor pins
   pinMode(HOME_SENSOR, INPUT);
   pinMode(OVERRUN_SENSOR, INPUT);
-  pinMode(WHEEL_POSITION_SENSOR, INPUT);
 
   // Configure communication pins
   pinMode(HOME_NOTIFICATION, OUTPUT);
@@ -538,13 +509,11 @@ void setup() {
   pinMode(TROLL_HOME_COMMAND, INPUT_PULLDOWN);  // Pull-down to prevent floating/noise
   pinMode(MOVE_WHEEL_COMMAND, INPUT_PULLDOWN);  // Pull-down to prevent floating/noise
   pinMode(WHEEL_READY_NOTIFICATION, OUTPUT);
-  pinMode(WHEEL_POSITION_ALARM, OUTPUT);
 
   // Initialize outputs to LOW
   digitalWrite(HOME_NOTIFICATION, LOW);
   digitalWrite(OVERRUN_ALARM, LOW);
   digitalWrite(WHEEL_READY_NOTIFICATION, LOW);
-  digitalWrite(WHEEL_POSITION_ALARM, LOW);
 
   // Enable motor drivers (active low)
   digitalWrite(ENA_PIN, LOW);
@@ -582,14 +551,7 @@ void loop() {
       readyForProduction = true;
       delay(100);
 
-      Serial.println("Checking wheel position after homing...");
-      if (digitalRead(WHEEL_POSITION_SENSOR) == LOW) {
-        Serial.println("Wheel position sensor: CORRECT (LOW)");
-        digitalWrite(WHEEL_READY_NOTIFICATION, HIGH);
-      } else {
-        Serial.println("ERROR: Wheel position sensor HIGH after homing!");
-        triggerWheelPositionAlarm();
-      }
+      digitalWrite(WHEEL_READY_NOTIFICATION, HIGH);
     }
   }
 
