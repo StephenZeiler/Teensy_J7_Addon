@@ -496,6 +496,7 @@ void moveWheelOneSlot() {
   Serial.print(wheelDuration);
   Serial.println("ms");
 
+  delay(20); // Let wheel settle before checking position sensor
   if (digitalRead(WHEEL_POSITION_SENSOR) == LOW) {
     digitalWrite(WHEEL_READY_NOTIFICATION, HIGH);
   } else {
