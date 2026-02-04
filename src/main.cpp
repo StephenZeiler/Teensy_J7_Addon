@@ -538,9 +538,9 @@ void loop() {
     digitalWrite(HOME_NOTIFICATION, LOW);
     digitalWrite(WHEEL_READY_NOTIFICATION, LOW);
 
-    // Start both homing sequences
-    trollWheelToHome();
+    // Home bulb ram first, then wheel
     performRamHomingSequence();
+    trollWheelToHome();
 
     // Both are now homed
     if (ramIsHomed && wheelIsHomed) {
