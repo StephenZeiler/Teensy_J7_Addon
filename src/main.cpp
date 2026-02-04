@@ -633,6 +633,4 @@ void loop() {
     }
     lastInjectCommand = injectSignal;
   }
-
-  delay(10);
 }
