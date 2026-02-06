@@ -502,13 +502,16 @@ void setup() {
   pinMode(HOME_SENSOR, INPUT);
   pinMode(OVERRUN_SENSOR, INPUT);
 
-  // Configure communication pins
-  pinMode(HOME_NOTIFICATION, OUTPUT);
+  // Configure communication pins 
+  pinMode(HOME_NOTIFICATION, OUTPUT_OPENDRAIN);
+  pinMode(WHEEL_READY_NOTIFICATION, OUTPUT_OPENDRAIN);
+  pinMode(OVERRUN_ALARM, OUTPUT_OPENDRAIN);
+ // pinMode(HOME_NOTIFICATION, OUTPUT);
+ //pinMode(WHEEL_READY_NOTIFICATION, OUTPUT);
+ //pinMode(OVERRUN_ALARM, OUTPUT);
   pinMode(INJECT_COMMAND, INPUT_PULLDOWN);  // Pull-down to prevent floating/noise
-  pinMode(OVERRUN_ALARM, OUTPUT);
   pinMode(TROLL_HOME_COMMAND, INPUT_PULLDOWN);  // Pull-down to prevent floating/noise
   pinMode(MOVE_WHEEL_COMMAND, INPUT_PULLDOWN);  // Pull-down to prevent floating/noise
-  pinMode(WHEEL_READY_NOTIFICATION, OUTPUT);
 
   // Initialize outputs to LOW
   digitalWrite(HOME_NOTIFICATION, LOW);
