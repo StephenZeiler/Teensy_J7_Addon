@@ -18,8 +18,8 @@
  *   ENA  = 7
  *
  * Sensors:
- *   HOME_SENSOR          = 32 (HIGH when active)
- *   OVERRUN_SENSOR       = 30 (HIGH when active)
+ *   HOME_SENSOR          = 32 (LOW when active)
+ *   OVERRUN_SENSOR       = 30 (LOW when active)
  *
  * Arduino Communication:
  *   HOME_NOTIFICATION    = 11 (Teensy -> Arduino)
@@ -115,9 +115,9 @@ void stepMotor(int delayTime) {
   delayMicroseconds(delayTime);
 }
 
-// Active-HIGH sensors (as you stated)
-inline bool isHomeActive()    { return (digitalRead(HOME_SENSOR) == HIGH); }
-inline bool isOverrunActive() { return (digitalRead(OVERRUN_SENSOR) == HIGH); }
+// Active-LOW sensors
+inline bool isHomeActive()    { return (digitalRead(HOME_SENSOR) == LOW); }
+inline bool isOverrunActive() { return (digitalRead(OVERRUN_SENSOR) == LOW); }
 
 // =====================
 // ALARMS
