@@ -74,11 +74,11 @@ const int SAFETY_MARGIN_STEPS = 256;  //
 // WHEEL MOTOR PARAMETERS (doubled for 1600 steps/rev)
 // =====================
 const int WHEEL_STEPS_PER_SLOT = 400;  // (200 * 2)
-const int WHEEL_TROLL_SPEED    = 2000; // homing speed (slowed 50%)
+const int WHEEL_TROLL_SPEED    = 1000; // homing speed (slowed 50%)
 
 // Wheel motion slowed 50% (2x delays)
-const int MIN_STEP_DELAY = 238;  // was 119
-const int MAX_STEP_DELAY = 1914; // was 957
+const int MIN_STEP_DELAY = 119;  // was 119
+const int MAX_STEP_DELAY = 957; // was 957
 const int ACCEL_STEPS    = 92;   // (46 * 2)
 const int DECEL_STEPS    = 92;   // (46 * 2)
 
