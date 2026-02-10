@@ -63,9 +63,9 @@ const int WHEEL_READY_NOTIFICATION= 26; // Output to Arduino: Wheel ready
 // =====================
 // RAM MOTOR PARAMETERS (doubled for 1600 steps/rev)
 // =====================
-const int STEP_DELAY          = 70;   // production speed (15% faster)
-const int HOME_STEP_DELAY     = 137;  // homing fast (30% slower)
-const int SLOW_STEP_DELAY     = 182;  // homing creep (30% slower)
+const int STEP_DELAY          = 56;   // production speed (20% faster)
+const int HOME_STEP_DELAY     = 137;  // homing fast
+const int SLOW_STEP_DELAY     = 182;  // homing creep
 const int INJECT_STEPS        = 853;  // Current setting is at 80mm travel...150mm is the circuference of the pulley. 1600 steps/rev.  1600/150mm = 10.6666 steps /mm desired in travel.. So if i want to travel 65mm INJECT_STEPS would be 10.6666*65 == 692. 
 const int OVERRUN_CHECK_STEPS = 256;  // 
 const int SAFETY_MARGIN_STEPS = 256;  // 
@@ -74,11 +74,11 @@ const int SAFETY_MARGIN_STEPS = 256;  //
 // WHEEL MOTOR PARAMETERS (doubled for 1600 steps/rev)
 // =====================
 const int WHEEL_STEPS_PER_SLOT = 400;  // (200 * 2)
-const int WHEEL_TROLL_SPEED    = 1000; // homing speed (slowed 50%)
+const int WHEEL_TROLL_SPEED    = 1000; // homing speed
 
-// Wheel motion slowed 50% (2x delays)
-const int MIN_STEP_DELAY = 119;  // was 119
-const int MAX_STEP_DELAY = 957; // was 957
+// Wheel motion (20% faster)
+const int MIN_STEP_DELAY = 95;   // was 119
+const int MAX_STEP_DELAY = 766;  // was 957
 const int ACCEL_STEPS    = 92;   // (46 * 2)
 const int DECEL_STEPS    = 92;   // (46 * 2)
 
